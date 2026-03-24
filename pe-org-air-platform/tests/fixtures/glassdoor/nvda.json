@@ -1,0 +1,13 @@
+[
+  {
+    "review_id": "r1",
+    "rating": 4.5,
+    "title": "Great place",
+    "pros": "Innovative teams",
+    "cons": "Fast pace",
+    "advice_to_management": "Keep investing in AI",
+    "is_current_employee": true,
+    "job_title": "ML Engineer",
+    "review_date": "2025-08-01T00:00:00+00:00"
+  }
+]
