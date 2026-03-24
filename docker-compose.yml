@@ -1,0 +1,32 @@
+services:
+  rag-api:
+    build:
+      context: ./pe-org-air-platform
+      dockerfile: docker/Dockerfile
+    container_name: pe-rag-api
+    env_file:
+      - ./pe-org-air-platform/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_PATH: /data/chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/data/chroma
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: pe-rag-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  chroma_data:
+    name: pe_rag_chroma
+  redis_data:
+    name: pe_rag_redis

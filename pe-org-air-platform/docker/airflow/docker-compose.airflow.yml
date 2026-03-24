@@ -1,0 +1,97 @@
+services:
+  airflow-postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    build:
+      context: ../../..
+      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
+      PYTHONPATH: /opt/airflow/project/pe-org-air-platform
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../../:/opt/airflow/project
+      - airflow_logs:/opt/airflow/logs
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create --username airflow --firstname Air --lastname Flow --role Admin --email airflow@example.com --password airflow
+      || true
+      "
+
+  airflow-webserver:
+    build:
+      context: ../../..
+      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
+      PYTHONPATH: /opt/airflow/project/pe-org-air-platform
+    env_file:
+      - ../../.env
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../../../:/opt/airflow/project
+      - airflow_logs:/opt/airflow/logs
+    command: webserver
+
+  airflow-scheduler:
+    build:
+      context: ../../..
+      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
+      PYTHONPATH: /opt/airflow/project/pe-org-air-platform
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../../:/opt/airflow/project
+      - airflow_logs:/opt/airflow/logs
+    command: scheduler
+
+volumes:
+  airflow_postgres_data:
+  airflow_logs:
