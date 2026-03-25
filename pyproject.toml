@@ -13,6 +13,11 @@ requests = "2.32.5"
 streamlit = "^1.43.0"
 structlog = "^25.5.0"
 prometheus-client = "^0.24.1"
+langgraph = "^1.1.3"
+langchain = "^1.2.13"
+httpx = "^0.28.1"
+langchain-google-genai = "^4.2.1"
+langchain-openai = "^1.1.12"
 
 [tool.poetry.group.backend.dependencies]
 annotated-doc = "0.0.4"
