@@ -11,6 +11,8 @@ packages = [{ include = "app", from = "pe-org-air-platform" }]
 python = ">=3.12,<3.15"
 requests = "2.32.5"
 streamlit = "^1.43.0"
+structlog = "^25.5.0"
+prometheus-client = "^0.24.1"
 
 [tool.poetry.group.backend.dependencies]
 annotated-doc = "0.0.4"
