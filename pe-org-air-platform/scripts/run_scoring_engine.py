@@ -2,6 +2,7 @@ from __future__ import annotations
  
 import argparse
 import json
+import logging
 import math
 import sys
 from datetime import UTC, datetime
@@ -25,7 +26,9 @@ from app.scoring_engine.talent_concentration import TalentConcentrationCalculato
 from app.scoring_engine.vr_model import DimensionInput, compute_vr_score, fetch_dimension_inputs
 from app.services.result_artifacts import write_json_artifact
 from app.services.snowflake import get_snowflake_connection
- 
+
+logger = logging.getLogger(__name__)
+
  
 def _now_ts() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -446,6 +449,14 @@ def score_one_company(cur, *, company_id: str, version: str, run_id: str) -> Non
  
     hr_base = float(profile.hr_baseline_value or 75.0)
     hr_score = _clamp(hr_base * (1.0 + 0.15 * pf), 0.0, 100.0)
+    logger.debug(
+        "hr_score_computed company_id=%s run_id=%s hr_base=%.4f position_factor=%.4f hr_score=%.4f",
+        company_id,
+        run_id,
+        hr_base,
+        float(pf),
+        hr_score,
+    )
     audit_log(
         cur,
         run_id,
@@ -580,8 +591,14 @@ def score_one_company(cur, *, company_id: str, version: str, run_id: str) -> Non
         "sem": sem,
         "generated_at_utc": _now_ts(),
     }
- 
+
     penalty_magnitude = float(1.0 - talent_risk_adj)
+    logger.debug(
+        "org_air_score_persisting company_id=%s run_id=%s hr_payload=%s",
+        company_id,
+        run_id,
+        breakdown_json.get("hr"),
+    )
     upsert_org_air_score(
         cur,
         company_id=company_id,
