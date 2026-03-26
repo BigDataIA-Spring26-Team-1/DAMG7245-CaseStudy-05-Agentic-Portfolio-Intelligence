@@ -8,6 +8,7 @@ import structlog
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from app.agents.state import DueDiligenceState
+from app.config import settings
 from app.services.observability.metrics import track_agent
 from app.mcp.server import call_tool
 logger = structlog.get_logger()
@@ -20,19 +21,34 @@ class MultiLLM:
         self.primary = None
         self.fallback = None
 
+    @staticmethod
+    def _env_value(*names: str) -> str | None:
+        for name in names:
+            value = os.getenv(name)
+            if value:
+                return value
+            settings_value = getattr(settings, name.lower(), None)
+            if settings_value:
+                return str(settings_value)
+        return None
+
     def _get_primary(self):
-        if self.primary is None and os.getenv("OPENAI_API_KEY"):
+        openai_api_key = self._env_value("OPENAI_API_KEY")
+        if self.primary is None and openai_api_key:
             self.primary = ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=0.2,
+                api_key=openai_api_key,
             )
         return self.primary
 
     def _get_fallback(self):
-        if self.fallback is None and os.getenv("GOOGLE_API_KEY"):
+        gemini_api_key = self._env_value("GEMINI_API_KEY")
+        if self.fallback is None and gemini_api_key:
             self.fallback = ChatGoogleGenerativeAI(
                 model="gemini-1.5-pro",
                 temperature=0.2,
+                google_api_key=gemini_api_key,
             )
         return self.fallback
 
@@ -42,7 +58,7 @@ class MultiLLM:
 
         if primary is None and fallback is None:
             raise RuntimeError(
-                "No LLM API key configured. Set OPENAI_API_KEY or GOOGLE_API_KEY."
+                "No LLM API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY."
             )
 
         try:
@@ -59,7 +75,7 @@ class MultiLLM:
             raise
 
         raise RuntimeError(
-            "No available LLM client. Check OPENAI_API_KEY/GOOGLE_API_KEY and connectivity."
+            "No available LLM client. Check OPENAI_API_KEY or GEMINI_API_KEY and connectivity."
         )
 class MCPToolCaller:
     """
@@ -110,24 +126,34 @@ class SECAnalysisAgent:
     """
     def __init__(self) -> None:
         self.llm = MultiLLM()
+
+    def _empty_summary(self, company_id: str) -> str:
+        return (
+            f"No SEC or evidence-led findings were retrieved for {company_id}. "
+            "This summary is withheld because the evidence set is empty. "
+            "Verify CS2 document and external signal data for this company before interpreting readiness."
+        )
+
     @track_agent("sec_analyst")
     async def analyze(self, state: DueDiligenceState) -> Dict[str, Any]:
         company_id = state["company_id"]
         evidence_result = await get_evidence(company_id=company_id, dimension="all")
         findings = json.loads(evidence_result) if evidence_result else []
-        summary = self.llm.invoke(
-            f"""
-            You are analyzing SEC and evidence-led AI readiness signals for {company_id}.
-            Summarize the most important findings from the following evidence.
-            Focus on:
-            - data infrastructure
-            - AI governance
-            - technology stack
-            Keep it concise and factual.
-            Evidence:
-            {json.dumps(findings[:3], indent=2)}
-            """
-        ).content
+        summary = self._empty_summary(company_id)
+        if findings:
+            summary = self.llm.invoke(
+                f"""
+                You are analyzing SEC and evidence-led AI readiness signals for {company_id}.
+                Summarize the most important findings from the following evidence.
+                Focus on:
+                - data infrastructure
+                - AI governance
+                - technology stack
+                Keep it concise and factual.
+                Evidence:
+                {json.dumps(findings[:3], indent=2)}
+                """
+            ).content
         return {
             "sec_analysis": {
                 "company_id": company_id,
@@ -154,23 +180,33 @@ class TalentAnalysisAgent:
     """
     def __init__(self) -> None:
         self.llm = MultiLLM()
+
+    def _empty_summary(self, company_id: str) -> str:
+        return (
+            f"No talent or leadership evidence was retrieved for {company_id}. "
+            "This summary is withheld because the evidence set is empty. "
+            "Verify CS2 external signals and related retrieval inputs for this company before drawing conclusions."
+        )
+
     @track_agent("talent_analyst")
     async def analyze(self, state: DueDiligenceState) -> Dict[str, Any]:
         company_id = state["company_id"]
         evidence_result = await get_evidence(company_id=company_id, dimension="talent")
         findings = json.loads(evidence_result) if evidence_result else []
-        summary = self.llm.invoke(
-            f"""
-            Analyze talent and leadership readiness for {company_id}.
-            Summarize what the evidence suggests about:
-            - AI talent depth
-            - leadership strength
-            - organizational culture
-            Keep it concise and practical.
-            Evidence:
-            {json.dumps(findings[:3], indent=2)}
-            """
-        ).content
+        summary = self._empty_summary(company_id)
+        if findings:
+            summary = self.llm.invoke(
+                f"""
+                Analyze talent and leadership readiness for {company_id}.
+                Summarize what the evidence suggests about:
+                - AI talent depth
+                - leadership strength
+                - organizational culture
+                Keep it concise and practical.
+                Evidence:
+                {json.dumps(findings[:3], indent=2)}
+                """
+            ).content
         return {
             "talent_analysis": {
                 "company_id": company_id,
