@@ -1,0 +1,11 @@
+{
+  "company_ids": [
+    "NVDA"
+  ],
+  "generated_at_utc": "2026-03-26T01:54:45+00:00",
+  "model_version": "cs3-scoring-v2",
+  "run_id": "03491228-924c-413c-9bad-d8bce98df089",
+  "status": "success",
+  "tickers": null,
+  "version": "v1.0"
+}

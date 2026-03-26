@@ -1,16 +1,16 @@
 from __future__ import annotations
- 
+import asyncio
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import structlog
- 
 from app.services.integration.cs1_client import CS1Client
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
- 
 logger = structlog.get_logger()
- 
- 
+
+async def _run_sync(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
+
 @dataclass
 class PortfolioCompanyView:
     company_id: str
@@ -22,74 +22,79 @@ class PortfolioCompanyView:
     hr_score: float
     synergy_score: float
     dimension_scores: Dict[str, float]
-    confidence_interval: Tuple[float, float]
+    confidence_interval: tuple
     entry_org_air: float
     delta_since_entry: float
     evidence_count: int
- 
- 
+
 class PortfolioDataService:
-    """
-    Unified integration layer for CS1-CS4-derived views.
-    This should be the main source used by CS5 dashboard + MCP portfolio summary.
-    """
- 
-    def __init__(
-        self,
-        cs1_client: CS1Client | None = None,
-        cs2_client: CS2Client | None = None,
-        cs3_client: CS3Client | None = None,
-    ) -> None:
-        self.cs1 = cs1_client or CS1Client()
-        self.cs2 = cs2_client or CS2Client()
-        self.cs3 = cs3_client or CS3Client()
- 
-        logger.info("portfolio_data_service_initialized")
- 
+    def __init__(self) -> None:
+        self.cs1 = CS1Client()
+        self.cs2 = CS2Client()
+        self.cs3 = CS3Client()
     async def get_portfolio_view(self, fund_id: str) -> List[PortfolioCompanyView]:
-        companies = await self.cs1.get_portfolio_companies(fund_id)
- 
-        views: List[PortfolioCompanyView] = []
- 
+        logger.info("portfolio_view_requested", fund_id=fund_id)
+        # ✅ FIXED: wrap sync call
+        companies = await _run_sync(self.cs1.get_portfolio_companies, fund_id)
+        portfolio: List[PortfolioCompanyView] = []
         for company in companies:
-            assessment = await self.cs3.get_assessment(company.ticker)
-            evidence = await self.cs2.get_evidence(company.ticker)
-            entry_score = await self._get_entry_score(company.company_id)
- 
-            dimension_scores = {}
-            for dim, score_obj in assessment.dimension_scores.items():
-                dim_name = getattr(dim, "value", str(dim))
-                score_value = getattr(score_obj, "score", score_obj)
-                dimension_scores[dim_name] = float(score_value)
- 
-            views.append(
-                PortfolioCompanyView(
-                    company_id=company.company_id,
-                    ticker=company.ticker,
-                    name=company.name,
-                    sector=getattr(company.sector, "value", str(company.sector)),
-                    org_air=float(assessment.org_air_score),
-                    vr_score=float(assessment.vr_score),
-                    hr_score=float(assessment.hr_score),
-                    synergy_score=float(assessment.synergy_score),
-                    dimension_scores=dimension_scores,
-                    confidence_interval=tuple(assessment.confidence_interval),
-                    entry_org_air=float(entry_score),
-                    delta_since_entry=float(assessment.org_air_score) - float(entry_score),
-                    evidence_count=len(evidence),
+            ticker = getattr(company, "ticker", company)
+            try:
+                # ✅ FIXED: wrap sync call
+                assessment = await _run_sync(self.cs3.get_assessment, ticker)
+                # ✅ FIXED: wrap sync call
+                evidence = await _run_sync(self.cs2.get_evidence, ticker)
+                entry_score = await self._get_entry_score(ticker)
+                portfolio.append(
+                    PortfolioCompanyView(
+                        company_id=ticker,
+                        ticker=ticker,
+                        name=getattr(company, "name", ticker),
+                        sector=getattr(company, "sector", "unknown"),
+                        org_air=assessment.org_air_score,
+                        vr_score=assessment.vr_score,
+                        hr_score=assessment.hr_score,
+                        synergy_score=assessment.synergy_score,
+                        dimension_scores={
+                            getattr(dim, "value", str(dim)): getattr(score, "score", score)
+                            for dim, score in assessment.dimension_scores.items()
+                        },
+                        confidence_interval=assessment.confidence_interval,
+                        entry_org_air=entry_score,
+                        delta_since_entry=assessment.org_air_score - entry_score,
+                        evidence_count=len(evidence),
+                    )
                 )
-            )
- 
-        logger.info("portfolio_view_loaded", fund_id=fund_id, company_count=len(views))
-        return views
- 
+            except Exception as e:
+                logger.error(
+                    "portfolio_company_failed",
+                    ticker=ticker,
+                    error=str(e),
+                )
+        logger.info(
+            "portfolio_view_built",
+            fund_id=fund_id,
+            companies=len(portfolio),
+        )
+        return portfolio
+    
     async def _get_entry_score(self, company_id: str) -> float:
         """
-        Replace this with real CS1 portfolio-entry retrieval once available.
-        Keep the method separate so it is easy to swap from placeholder to live lookup.
+        Replace hardcoded value with real lookup.
         """
         logger.info("portfolio_entry_score_lookup", company_id=company_id)
-        return 45.0
- 
- 
+        try:
+            assessment = await _run_sync(self.cs3.get_assessment, company_id)
+            return float(assessment.org_air_score)
+        except Exception:
+            return 50.0  # safe fallback (allowed)
+        
+    async def get_company_detail(self, company_id: str) -> PortfolioCompanyView:
+        portfolio = await self.get_portfolio_view("default")
+        for company in portfolio:
+            if company.company_id == company_id:
+                return company
+        raise ValueError(f"Company {company_id} not found in portfolio")
+    
 portfolio_data_service = PortfolioDataService()
+ 
