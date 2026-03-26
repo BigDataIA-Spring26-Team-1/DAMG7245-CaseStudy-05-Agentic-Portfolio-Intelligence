@@ -9,6 +9,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from app.agents.state import DueDiligenceState
 from app.services.observability.metrics import track_agent
+from app.mcp.server import call_tool
 logger = structlog.get_logger()
 class MultiLLM:
     """
@@ -62,22 +63,11 @@ class MultiLLM:
         )
 class MCPToolCaller:
     """
-    Thin async wrapper over the MCP-facing tool interface.
-    Replace the URL if you expose the MCP layer through a different route.
+    Direct in-process MCP dispatcher (no HTTP).
     """
-    def __init__(self, base_url: str = "http://localhost:3000") -> None:
-        self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=30.0)
+ 
     async def call_tool(self, tool_name: str, arguments: dict) -> str:
-        response = await self.client.post(
-            f"{self.base_url}/tools/{tool_name}",
-            json=arguments,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload, dict) and "result" in payload:
-            return payload["result"]
-        return json.dumps(payload)
+        return await call_tool(tool_name, arguments)
 mcp_client = MCPToolCaller()
 async def get_org_air_score(company_id: str) -> str:
     return await mcp_client.call_tool(

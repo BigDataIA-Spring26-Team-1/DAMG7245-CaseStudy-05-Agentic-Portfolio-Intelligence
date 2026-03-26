@@ -6,6 +6,11 @@ from typing import Dict, List, Optional, Tuple
 
 from app.services.integration.scoring_client import ScoringClient
 
+from pathlib import Path
+import subprocess
+import sys
+from typing import Any
+
 
 class Dimension(str, Enum):
     DATA_INFRASTRUCTURE = "data_infrastructure"
@@ -142,6 +147,34 @@ class CS3Client:
             )
             for item in payload
         ]
+    def run_scoring(self, company_id: str, version: str = "v1.0") -> dict[str, Any]:
+        """
+        Trigger the CS3 scoring pipeline for a company by invoking the scoring runner.
+        Mirrors the behavior used by the scoring router.
+        """
+        root_dir = Path(__file__).resolve().parents[3]
+        runner = root_dir / "scripts" / "run_scoring_engine.py"
+    
+        if not runner.exists():
+            raise FileNotFoundError(f"Scoring runner not found at {runner}")
+    
+        cmd = [sys.executable, str(runner), "--company-id", company_id, "--version", version]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    
+        if proc.returncode != 0:
+            raise RuntimeError(f"Scoring failed: {proc.stderr or proc.stdout}")
+    
+        run_id = ""
+        for line in proc.stdout.splitlines():
+            if line.lower().startswith("run_id:"):
+                run_id = line.split(":", 1)[1].strip()
+                break
+    
+        return {
+            "status": "submitted",
+            "run_id": run_id,
+            "stdout": proc.stdout,
+        }
 
     def close(self) -> None:
         return None

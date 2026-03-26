@@ -7,6 +7,7 @@ from app.services.integration.portfolio_data_service import portfolio_data_servi
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
 from app.services.justification.generator import JustificationGenerator
+import asyncio
  
 logger = structlog.get_logger()
  
@@ -14,10 +15,20 @@ cs2_client = CS2Client()
 cs3_client = CS3Client()
 justification_generator = JustificationGenerator()
  
- 
+async def _run_sync(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
+    
 async def calculate_org_air_score(arguments: dict) -> str:
     company_id = arguments["company_id"]
-    assessment = await cs3_client.get_assessment(company_id)
+ 
+    try:
+        assessment = await _run_sync(cs3_client.get_assessment, company_id)
+    except ValueError:
+        logger.warning("no_scores_found_triggering_scoring", company_id=company_id)
+ 
+        await _run_sync(cs3_client.run_scoring, company_id, "v1.0")
+ 
+        assessment = await _run_sync(cs3_client.get_assessment, company_id)
  
     return json.dumps(
         {
@@ -41,10 +52,11 @@ async def get_company_evidence(arguments: dict) -> str:
     dimension = arguments.get("dimension", "all")
     limit = arguments.get("limit", 10)
  
-    evidence = await cs2_client.get_evidence(
-        company_id=company_id,
-        dimension=dimension,
-        limit=limit,
+    evidence = await _run_sync(
+        cs2_client.get_evidence,
+        company_id,
+        dimension,
+        limit,
     )
  
     return json.dumps(
@@ -59,6 +71,7 @@ async def get_company_evidence(arguments: dict) -> str:
         ],
         indent=2,
     )
+    
  
  
 async def generate_justification(arguments: dict) -> str:
@@ -102,7 +115,8 @@ async def project_ebitda_impact(arguments: dict) -> str:
 async def run_gap_analysis(arguments: dict) -> str:
     company_id = arguments["company_id"]
     target_org_air = float(arguments["target_org_air"])
-    assessment = await cs3_client.get_assessment(company_id)
+ 
+    assessment = await _run_sync(cs3_client.get_assessment, company_id)
  
     current_scores = {
         getattr(dim, "value", str(dim)): getattr(score, "score", score)
