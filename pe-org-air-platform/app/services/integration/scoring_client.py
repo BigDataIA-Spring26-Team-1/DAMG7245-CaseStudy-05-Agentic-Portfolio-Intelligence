@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
@@ -8,6 +9,8 @@ from app.config import settings
 from app.services.redis_cache import cache_get_json, cache_set_json
 from app.services.snowflake import get_snowflake_connection
 from app.scoring_engine.rubric_scorer import DIMENSION_RUBRICS, FEATURE_TO_RUBRIC_DIM
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -143,9 +146,15 @@ class ScoringClient:
         breakdown = payload.get("breakdown", {}) or {}
         hr = breakdown.get("hr")
         if isinstance(hr, dict):
-            score = hr.get("score")
-            if isinstance(score, (int, float)):
-                return round(float(score), 2)
+            for key in ("score", "hr_score", "value", "final"):
+                if key in hr:
+                    score = self._coerce_numeric(hr.get(key), default=None)
+                    if score is not None:
+                        return round(float(score), 2)
+        if "hr_score" in payload:
+            top_level_hr = self._coerce_numeric(payload.get("hr_score"), default=None)
+            if top_level_hr is not None:
+                return round(float(top_level_hr), 2)
         return None
 
     def _latest_score_row(self, company_id: str) -> ScoringRecord:
@@ -368,6 +377,7 @@ class ScoringClient:
 
     def get_assessment(self, company_id: str) -> Dict[str, Any]:
         payload = self.get_latest_scores(company_id)
+        hr_score = self._hr_score_from_payload(payload)
         dimension_scores = {
             item["dimension"]: {
                 "dimension": item["dimension"],
@@ -395,13 +405,20 @@ class ScoringClient:
 
         breakdown = payload.get("breakdown", {}) or {}
         talent_penalty = breakdown.get("talent_penalty", {}) if isinstance(breakdown, dict) else {}
+        logger.debug(
+            "scoring_client_get_assessment_returning company_id=%s assessment_id=%s hr_score=%s hr_payload=%s",
+            payload.get("company_id"),
+            payload.get("assessment_id"),
+            hr_score,
+            breakdown.get("hr") if isinstance(breakdown, dict) else None,
+        )
 
         return {
             "company_id": payload.get("company_id"),
             "assessment_id": payload.get("assessment_id"),
             "assessment_date": str(payload.get("scored_at") or ""),
             "vr_score": self._coerce_numeric(payload.get("vr_score", 0.0), default=0.0),
-            "hr_score": self._hr_score_from_payload(payload),
+            "hr_score": hr_score,
             "synergy_score": self._coerce_numeric(payload.get("synergy_bonus", 0.0), default=0.0),
             "org_air_score": self._coerce_numeric(
                 payload.get("overall_score", payload.get("composite_score", 0.0)),
