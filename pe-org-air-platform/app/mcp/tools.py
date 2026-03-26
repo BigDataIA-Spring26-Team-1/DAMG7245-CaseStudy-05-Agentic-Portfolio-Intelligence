@@ -7,6 +7,7 @@ from app.services.integration.portfolio_data_service import portfolio_data_servi
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
 from app.services.justification.generator import JustificationGenerator
+from app.services.retrieval.dimension_mapper import DimensionMapper
 import asyncio
  
 logger = structlog.get_logger()
@@ -14,6 +15,7 @@ logger = structlog.get_logger()
 cs2_client = CS2Client()
 cs3_client = CS3Client()
 justification_generator = JustificationGenerator()
+dimension_mapper = DimensionMapper()
  
 async def _run_sync(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
@@ -49,15 +51,30 @@ async def calculate_org_air_score(arguments: dict) -> str:
  
 async def get_company_evidence(arguments: dict) -> str:
     company_id = arguments["company_id"]
-    dimension = arguments.get("dimension", "all")
-    limit = arguments.get("limit", 10)
+    dimension = str(arguments.get("dimension", "all") or "all").strip().lower().replace(" ", "_")
+    limit = int(arguments.get("limit", 10) or 10)
  
-    evidence = await _run_sync(
-        cs2_client.get_evidence,
-        company_id,
-        dimension,
-        limit,
-    )
+    evidence = await _run_sync(cs2_client.get_evidence, company_id)
+
+    if dimension != "all":
+        dimension_aliases = {
+            "talent_skills": "talent",
+            "leadership_vision": "leadership",
+            "culture_change": "culture",
+        }
+        target_dimension = dimension_aliases.get(dimension, dimension)
+        evidence = [
+            item
+            for item in evidence
+            if target_dimension in dimension_mapper.get_all_dimensions_for_evidence(
+                signal_category=getattr(item.signal_category, "value", item.signal_category),
+                source_type=getattr(item.source_type, "value", item.source_type),
+                public_names=True,
+            )
+        ]
+
+    if limit > 0:
+        evidence = evidence[:limit]
  
     return json.dumps(
         [
@@ -65,7 +82,10 @@ async def get_company_evidence(arguments: dict) -> str:
                 "source_type": getattr(e.source_type, "value", str(e.source_type)),
                 "content": e.content[:500],
                 "confidence": e.confidence,
-                "signal_category": getattr(e, "signal_category", None),
+                "signal_category": getattr(e.signal_category, "value", str(e.signal_category)),
+                "source_url": e.source_url,
+                "title": e.title,
+                "fiscal_year": e.fiscal_year,
             }
             for e in evidence
         ],
@@ -78,9 +98,13 @@ async def generate_justification(arguments: dict) -> str:
     company_id = arguments["company_id"]
     dimension = arguments["dimension"]
  
-    result = await justification_generator.generate(company_id=company_id, dimension=dimension)
+    result = await _run_sync(
+        justification_generator.generate,
+        company_id=company_id,
+        dimension=dimension,
+    )
  
-    return json.dumps(result, indent=2)
+    return json.dumps(result, indent=2, default=str)
  
  
 async def project_ebitda_impact(arguments: dict) -> str:

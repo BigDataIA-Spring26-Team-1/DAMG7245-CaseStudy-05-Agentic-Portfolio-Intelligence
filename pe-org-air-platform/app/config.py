@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     results_local_copy_enabled: bool = True
     results_upload_to_s3: bool = True
 
+    # LLM
+    openai_api_key: str | None = None
+    gemini_api_key: str | None = None
+
     # SEC / EDGAR
     sec_user_agent: str = "PE-OrgAIR (Northeastern) yourname@northeastern.edu"
 

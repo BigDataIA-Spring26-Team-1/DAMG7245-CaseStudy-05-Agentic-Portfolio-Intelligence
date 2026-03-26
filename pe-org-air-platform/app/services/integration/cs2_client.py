@@ -65,6 +65,28 @@ def _index_cache_key(evidence_id: str) -> str:
 
 
 class CS2Client:
+    def _coerce_source_type(self, value: Any) -> Optional[SourceType]:
+        if isinstance(value, SourceType):
+            return value
+        normalized = str(getattr(value, "value", value) or "").strip().lower()
+        if not normalized:
+            return None
+        try:
+            return SourceType(normalized)
+        except ValueError:
+            return None
+
+    def _coerce_signal_category(self, value: Any) -> Optional[SignalCategory]:
+        if isinstance(value, SignalCategory):
+            return value
+        normalized = str(getattr(value, "value", value) or "").strip().lower()
+        if not normalized:
+            return None
+        try:
+            return SignalCategory(normalized)
+        except ValueError:
+            return None
+
     def _section_source_type(self, section: Optional[str]) -> SourceType:
         normalized = (section or "").strip().lower()
         if "1a" in normalized:
@@ -277,11 +299,19 @@ class CS2Client:
         evidence = self._document_evidence(company_id) + self._signal_evidence(company_id)
 
         if source_types:
-            allowed_sources = {item.value for item in source_types}
+            allowed_sources = {
+                item.value
+                for item in (self._coerce_source_type(raw) for raw in source_types)
+                if item is not None
+            }
             evidence = [item for item in evidence if item.source_type.value in allowed_sources]
 
         if signal_categories:
-            allowed_categories = {item.value for item in signal_categories}
+            allowed_categories = {
+                item.value
+                for item in (self._coerce_signal_category(raw) for raw in signal_categories)
+                if item is not None
+            }
             evidence = [item for item in evidence if item.signal_category.value in allowed_categories]
 
         if min_confidence > 0:
