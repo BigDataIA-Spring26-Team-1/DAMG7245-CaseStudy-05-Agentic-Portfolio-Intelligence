@@ -10,6 +10,7 @@ from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
 from app.services.integration.portfolio_data_service import portfolio_data_service
 from app.services.justification.generator import JustificationGenerator
+from app.services.observability.metrics import track_mcp_tool
 from app.services.retrieval.dimension_mapper import DimensionMapper
  
 logger = structlog.get_logger()
@@ -39,6 +40,7 @@ async def _run_sync(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
     
 
+@track_mcp_tool("calculate_org_air_score")
 async def calculate_org_air_score(arguments: dict) -> str:
     company_id = arguments["company_id"]
     cs3_client = get_cs3_client()
@@ -69,6 +71,7 @@ async def calculate_org_air_score(arguments: dict) -> str:
     )
  
  
+@track_mcp_tool("get_company_evidence")
 async def get_company_evidence(arguments: dict) -> str:
     company_id = arguments["company_id"]
     dimension = str(arguments.get("dimension", "all") or "all").strip().lower().replace(" ", "_")
@@ -116,6 +119,7 @@ async def get_company_evidence(arguments: dict) -> str:
     
  
  
+@track_mcp_tool("generate_justification")
 async def generate_justification(arguments: dict) -> str:
     company_id = arguments["company_id"]
     dimension = arguments["dimension"]
@@ -130,6 +134,7 @@ async def generate_justification(arguments: dict) -> str:
     return json.dumps(result, indent=2, default=str)
  
  
+@track_mcp_tool("project_ebitda_impact")
 async def project_ebitda_impact(arguments: dict) -> str:
     """
     Replace internal math here with your CS3/CS4-compatible EBITDA projection logic.
@@ -159,6 +164,7 @@ async def project_ebitda_impact(arguments: dict) -> str:
     )
  
  
+@track_mcp_tool("run_gap_analysis")
 async def run_gap_analysis(arguments: dict) -> str:
     company_id = arguments["company_id"]
     target_org_air = float(arguments["target_org_air"])
@@ -188,6 +194,7 @@ async def run_gap_analysis(arguments: dict) -> str:
     )
  
  
+@track_mcp_tool("get_portfolio_summary")
 async def get_portfolio_summary(arguments: dict) -> str:
     fund_id = arguments["fund_id"]
     portfolio = await portfolio_data_service.get_portfolio_view(fund_id)

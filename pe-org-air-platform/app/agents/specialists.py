@@ -3,31 +3,16 @@ import json
 import os
 from datetime import datetime
 from typing import Any, Dict
-import httpx
 import structlog
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from app.agents.state import DueDiligenceState
 from app.config import settings
-from app.services.observability.metrics import track_agent
-from app.mcp.server import call_tool
 from app.mcp.client import MCPClient
+from app.services.observability.metrics import track_agent
 logger = structlog.get_logger()
-async def get_evidence(company_id: str, dimension: str = "all") -> str:
-    return await call_tool("get_company_evidence", {"company_id": company_id, "dimension": dimension})
-async def get_org_air_score(company_id: str) -> str:
-    return await call_tool("calculate_org_air_score", {"company_id": company_id})
-async def get_justification(company_id: str, dimension: str) -> str:
-    return await call_tool("generate_justification", {"company_id": company_id, "dimension": dimension})
-async def get_gap_analysis(company_id: str, target: float) -> str:
-    return await call_tool("run_gap_analysis", {"company_id": company_id, "target_org_air": target})
-async def get_ebitda_projection(
-    company_id: str, entry_score: float, target_score: float, h_r_score: float
-) -> str:
-    return await call_tool(
-        "project_ebitda_impact",
-        {"company_id": company_id, "entry_score": entry_score, "target_score": target_score, "h_r_score": h_r_score},
-    )
+
+
 class MultiLLM:
     """
     OpenAI as primary, Gemini as fallback.
@@ -94,6 +79,55 @@ class MCPToolCaller:
     async def call_tool(self, tool_name: str, arguments: dict) -> str:
         return await self.client.call_tool(tool_name, arguments)
 mcp_client = MCPToolCaller()
+
+
+async def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> str:
+    return await mcp_client.call_tool(tool_name, arguments)
+
+
+async def get_evidence(company_id: str, dimension: str = "all") -> str:
+    return await _call_mcp_tool(
+        "get_company_evidence",
+        {"company_id": company_id, "dimension": dimension},
+    )
+
+
+async def get_org_air_score(company_id: str) -> str:
+    return await _call_mcp_tool(
+        "calculate_org_air_score",
+        {"company_id": company_id},
+    )
+
+
+async def get_justification(company_id: str, dimension: str) -> str:
+    return await _call_mcp_tool(
+        "generate_justification",
+        {"company_id": company_id, "dimension": dimension},
+    )
+
+
+async def get_gap_analysis(company_id: str, target: float) -> str:
+    return await _call_mcp_tool(
+        "run_gap_analysis",
+        {"company_id": company_id, "target_org_air": target},
+    )
+
+
+async def get_ebitda_projection(
+    company_id: str,
+    entry_score: float,
+    target_score: float,
+    h_r_score: float,
+) -> str:
+    return await _call_mcp_tool(
+        "project_ebitda_impact",
+        {
+            "company_id": company_id,
+            "entry_score": entry_score,
+            "target_score": target_score,
+            "h_r_score": h_r_score,
+        },
+    )
 
 class SECAnalysisAgent:
     """
