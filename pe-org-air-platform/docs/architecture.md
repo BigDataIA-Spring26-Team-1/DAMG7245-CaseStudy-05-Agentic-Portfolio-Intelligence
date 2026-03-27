@@ -1,6 +1,6 @@
-# CS4 Architecture
+# CS5 Architecture
 
-![PE OrgAIR CS4 Architecture](assets/cs4-architecture.svg)
+![PE OrgAIR CS5 Architecture](assets/cs4-architecture.svg)
 
 ## Component Diagram
 
@@ -9,51 +9,71 @@ flowchart LR
     CS1[CS1Client<br/>company and portfolio facade]
     CS2[CS2Client<br/>documents + external signals]
     CS3[CS3Client<br/>scores + rubrics]
-    Mapper[DimensionMapper]
-    Indexer[index_evidence.py<br/>and Airflow DAG]
-    Chroma[(Chroma Vector Store)]
-    BM25[BM25 over Snowflake evidence]
-    Search[Search API]
-    Justify[JustificationGenerator]
-    IC[ICPrepWorkflow]
-    Notes[AnalystNotesCollector]
-    UI[Streamlit / FastAPI consumers]
+    CS4[CS4Client<br/>grounded justifications]
+    PDS[PortfolioDataService]
+    Hist[AssessmentHistoryService]
+    MCP[MCP Server<br/>tools + resources + prompts]
+    Agents[LangGraph Supervisor<br/>specialists + HITL]
+    Metrics[Prometheus Metrics]
+    UI[Streamlit Dashboard]
 
-    CS1 --> Justify
-    CS1 --> IC
-    CS2 --> Mapper
-    Mapper --> Indexer
-    CS2 --> Indexer
-    Indexer --> Chroma
-    CS2 --> BM25
-    CS3 --> Justify
-    CS3 --> IC
-    Chroma --> Search
-    BM25 --> Search
-    Search --> Justify
-    Justify --> IC
-    Notes --> Chroma
-    Justify --> UI
-    IC --> UI
-    Search --> UI
+    CS1 --> PDS
+    CS2 --> PDS
+    CS3 --> PDS
+    CS4 --> PDS
+    CS3 --> Hist
+    Hist --> PDS
+    PDS --> MCP
+    MCP --> Agents
+    Agents --> UI
+    MCP --> UI
+    CS1 --> Metrics
+    CS2 --> Metrics
+    CS3 --> Metrics
+    CS4 --> Metrics
+    MCP --> Metrics
+    Agents --> Metrics
 ```
 
-## Retrieval Path
+## Data And Retrieval Path
 
-1. `CS2Client` reads document chunks and external signals from Snowflake.
-2. `DimensionMapper` assigns public CS4 dimensions and signal weights.
-3. `scripts/index_evidence.py` converts evidence into Chroma documents and marks indexed records in Redis.
-4. `HybridRetriever` fuses Chroma semantic search with BM25 lexical search using reciprocal rank fusion.
-5. `HyDEGenerator` optionally expands the query through LiteLLM and falls back to deterministic expansion if credentials are unavailable.
+1. `CS1Client` resolves company and portfolio context from the platform store.
+2. `CS2Client` loads evidence from Snowflake-backed documents and external signals.
+3. `scripts/index_evidence.py` pushes evidence into Chroma for semantic search.
+4. `HybridRetriever` fuses vector search and BM25 lexical search.
+5. `JustificationGenerator` combines retrieved evidence with CS3 scoring context to produce grounded justifications.
 
-## Justification Path
+## MCP Path
 
-1. `ScoringClient` loads the latest company scoring payload.
-2. `CS3Client` exposes dimension scores, confidence intervals, and rubric criteria in the assignment-facing schema.
-3. `JustificationGenerator` retrieves evidence, aligns it to rubric keywords, and produces a grounded summary with citations.
+1. `app/mcp/server.py` registers six CS5 tools:
+   - `calculate_org_air_score`
+   - `get_company_evidence`
+   - `generate_justification`
+   - `project_ebitda_impact`
+   - `run_gap_analysis`
+   - `get_portfolio_summary`
+2. `app/mcp/resources.py` exposes reusable scoring and sector resources.
+3. `app/mcp/prompts.py` exposes reusable due-diligence and IC-prep prompts.
+4. `app/mcp/client.py` connects over Streamable HTTP or falls back to stdio for local execution.
 
-## Workflow Extensions
+## Agentic Workflow Path
 
-- `ICPrepWorkflow` rolls dimension justifications into a committee packet with strengths, risks, diligence questions, and recommendation.
-- `AnalystNotesCollector` now supports both generated notes and indexed submissions for interviews, DD findings, and data-room summaries.
-- `dags/index_evidence.py` provides the nightly indexing pipeline required by the case study extension.
+1. `app/agents/state.py` defines the LangGraph workflow state.
+2. `app/agents/specialists.py` contains the SEC, talent, scoring, evidence, and value-creation agents.
+3. `app/agents/supervisor.py` routes work across specialists and triggers HITL approval for:
+   - Org-AI-R scores below `40`
+   - Org-AI-R scores above `85`
+   - EBITDA projections above `5%`
+4. `exercises/agentic_due_diligence.py` is the coursework entrypoint for the end-to-end CS5 workflow.
+
+## Observability
+
+- `app/services/observability/metrics.py` tracks MCP tool calls, agent invocations, HITL approvals, and CS client calls.
+- `app/main.py` exposes `/metrics` for the FastAPI app.
+- `app/mcp/asgi.py` exposes `/metrics` alongside the Streamable HTTP MCP endpoint.
+
+## Persistence Notes
+
+- `assessment_history_snapshots` stores point-in-time scoring snapshots for trend analysis.
+- `PortfolioDataService` now reads entry scores from persisted history rather than returning a hardcoded fallback.
+- `CS4Client` is initialized lazily inside the portfolio service to avoid eager model-loading side effects during import.

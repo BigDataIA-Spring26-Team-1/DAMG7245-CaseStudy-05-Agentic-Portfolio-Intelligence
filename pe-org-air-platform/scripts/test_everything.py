@@ -55,6 +55,7 @@ def _compile_targets() -> CheckResult:
         ROOT / "scripts" / "demo_justify.py",
         ROOT / "scripts" / "index_evidence.py",
         ROOT / "scripts" / "test_everything.py",
+        ROOT / "exercises" / "agentic_due_diligence.py",
         ROOT / "exercises" / "complete_pipeline.py",
         REPO_ROOT / "exercises" / "complete_pipeline.py",
     ]
@@ -118,6 +119,14 @@ def _exercise_help_smoke() -> CheckResult:
     )
 
 
+def _agentic_exercise_help_smoke() -> CheckResult:
+    return _run_command(
+        name="agentic_exercise_help",
+        command=[sys.executable, str(ROOT / "exercises" / "agentic_due_diligence.py"), "--help"],
+        cwd=ROOT,
+    )
+
+
 def _pytest_suite(pytest_args: List[str]) -> CheckResult:
     command = [sys.executable, "-m", "pytest"]
     command.extend(pytest_args)
@@ -163,7 +172,7 @@ def _run_check(name: str, fn: Callable[[], CheckResult]) -> CheckResult:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the full local verification harness for the PE OrgAIR CS4 repository."
+        description="Run the local verification harness for the PE OrgAIR CS5 repository."
     )
     parser.add_argument(
         "--skip-pytest",
@@ -208,6 +217,7 @@ def main() -> None:
     results.append(_run_check("syntax", _compile_targets))
     results.append(_run_check("openapi_smoke", _openapi_smoke))
     results.append(_run_check("exercise_help", _exercise_help_smoke))
+    results.append(_run_check("agentic_exercise_help", _agentic_exercise_help_smoke))
 
     if args.skip_pytest:
         results.append(
@@ -251,7 +261,7 @@ def main() -> None:
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
-        print("\nPE OrgAIR CS4 verification summary\n")
+        print("\nPE OrgAIR CS5 verification summary\n")
         for result in results:
             print(f"[{result.status}] {result.name}")
             print(f"  {result.detail}")
