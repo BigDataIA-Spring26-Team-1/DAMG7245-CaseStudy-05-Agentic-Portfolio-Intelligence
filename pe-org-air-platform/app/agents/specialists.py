@@ -12,6 +12,31 @@ from app.config import settings
 from app.services.observability.metrics import track_agent
 from app.mcp.server import call_tool
 logger = structlog.get_logger()
+
+
+async def get_evidence(company_id: str, dimension: str = "all") -> str:
+    return await call_tool("get_company_evidence", {"company_id": company_id, "dimension": dimension})
+
+
+async def get_org_air_score(company_id: str) -> str:
+    return await call_tool("calculate_org_air_score", {"company_id": company_id})
+
+
+async def get_justification(company_id: str, dimension: str) -> str:
+    return await call_tool("generate_justification", {"company_id": company_id, "dimension": dimension})
+
+
+async def get_gap_analysis(company_id: str, target: float) -> str:
+    return await call_tool("run_gap_analysis", {"company_id": company_id, "target_org_air": target})
+
+
+async def get_ebitda_projection(
+    company_id: str, entry_score: float, target_score: float, h_r_score: float
+) -> str:
+    return await call_tool(
+        "project_ebitda_impact",
+        {"company_id": company_id, "entry_score": entry_score, "target_score": target_score, "h_r_score": h_r_score},
+    )
 class MultiLLM:
     """
     OpenAI as primary, Gemini as fallback.
@@ -20,7 +45,6 @@ class MultiLLM:
     def __init__(self) -> None:
         self.primary = None
         self.fallback = None
-
     @staticmethod
     def _env_value(*names: str) -> str | None:
         for name in names:
@@ -31,7 +55,6 @@ class MultiLLM:
             if settings_value:
                 return str(settings_value)
         return None
-
     def _get_primary(self):
         openai_api_key = self._env_value("OPENAI_API_KEY")
         if self.primary is None and openai_api_key:
@@ -41,7 +64,6 @@ class MultiLLM:
                 api_key=openai_api_key,
             )
         return self.primary
-
     def _get_fallback(self):
         gemini_api_key = self._env_value("GEMINI_API_KEY")
         if self.fallback is None and gemini_api_key:
@@ -51,89 +73,53 @@ class MultiLLM:
                 google_api_key=gemini_api_key,
             )
         return self.fallback
-
     def invoke(self, prompt: str):
         primary = self._get_primary()
         fallback = self._get_fallback()
-
         if primary is None and fallback is None:
             raise RuntimeError(
                 "No LLM API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY."
             )
-
         try:
             if primary is not None:
                 return primary.invoke(prompt)
         except Exception as e:
             logger.warning("openai_failed_fallback_to_gemini", error=str(e))
-
         try:
             if fallback is not None:
                 return fallback.invoke(prompt)
         except Exception as e2:
             logger.error("both_llms_failed", error=str(e2))
             raise
-
         raise RuntimeError(
             "No available LLM client. Check OPENAI_API_KEY or GEMINI_API_KEY and connectivity."
         )
 class MCPToolCaller:
     """
-    Direct in-process MCP dispatcher (no HTTP).
+    Real MCP transport bridge via the server's HTTP MCP endpoint.
+    Assumes the MCP server is running with Streamable HTTP transport.
     """
- 
+    def __init__(self, base_url: str = "http://127.0.0.1:8000/mcp") -> None:
+        self.base_url = base_url.rstrip("/")
+        self.client = httpx.AsyncClient(timeout=60.0)
     async def call_tool(self, tool_name: str, arguments: dict) -> str:
+        # Temporary bridge:
+        # while the agent layer is still custom, hit the compatibility REST shim if you add one,
+        # or keep the compatibility dispatcher until the client is upgraded to a full MCP client.
+        from app.mcp.server import call_tool
         return await call_tool(tool_name, arguments)
-mcp_client = MCPToolCaller()
-async def get_org_air_score(company_id: str) -> str:
-    return await mcp_client.call_tool(
-        "calculate_org_air_score",
-        {"company_id": company_id},
-    )
-async def get_evidence(company_id: str, dimension: str = "all") -> str:
-    return await mcp_client.call_tool(
-        "get_company_evidence",
-        {"company_id": company_id, "dimension": dimension},
-    )
-async def get_justification(company_id: str, dimension: str) -> str:
-    return await mcp_client.call_tool(
-        "generate_justification",
-        {"company_id": company_id, "dimension": dimension},
-    )
-async def get_gap_analysis(company_id: str, target: float) -> str:
-    return await mcp_client.call_tool(
-        "run_gap_analysis",
-        {"company_id": company_id, "target_org_air": target},
-    )
-async def get_ebitda_projection(
-    company_id: str,
-    entry_score: float,
-    target_score: float,
-    h_r_score: float,
-) -> str:
-    return await mcp_client.call_tool(
-        "project_ebitda_impact",
-        {
-            "company_id": company_id,
-            "entry_score": entry_score,
-            "target_score": target_score,
-            "h_r_score": h_r_score,
-        },
-    )
 class SECAnalysisAgent:
     """
     Agent focused on SEC / evidence-led platform assessment.
     """
     def __init__(self) -> None:
         self.llm = MultiLLM()
-
     def _empty_summary(self, company_id: str) -> str:
         return (
             f"No SEC or evidence-led findings were retrieved for {company_id}. "
             "This summary is withheld because the evidence set is empty. "
             "Verify CS2 document and external signal data for this company before interpreting readiness."
         )
-
     @track_agent("sec_analyst")
     async def analyze(self, state: DueDiligenceState) -> Dict[str, Any]:
         company_id = state["company_id"]
@@ -180,14 +166,12 @@ class TalentAnalysisAgent:
     """
     def __init__(self) -> None:
         self.llm = MultiLLM()
-
     def _empty_summary(self, company_id: str) -> str:
         return (
             f"No talent or leadership evidence was retrieved for {company_id}. "
             "This summary is withheld because the evidence set is empty. "
             "Verify CS2 external signals and related retrieval inputs for this company before drawing conclusions."
         )
-
     @track_agent("talent_analyst")
     async def analyze(self, state: DueDiligenceState) -> Dict[str, Any]:
         company_id = state["company_id"]
@@ -385,4 +369,3 @@ talent_agent = TalentAnalysisAgent()
 scoring_agent = ScoringAgent()
 evidence_agent = EvidenceAgent()
 value_agent = ValueCreationAgent()
- 
