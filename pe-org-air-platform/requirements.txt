@@ -57,5 +57,6 @@ chromadb>=1.5.1,<2.0.0
 sentence-transformers>=5.2.3,<6.0.0
 rank-bm25>=0.2.2,<0.3.0
 litellm>=1.82.1,<2.0.0
+mcp>=1.26.0,<2.0.0
 hypothesis>=6.125.0,<7.0.0
 streamlit>=1.43.0,<2.0.0

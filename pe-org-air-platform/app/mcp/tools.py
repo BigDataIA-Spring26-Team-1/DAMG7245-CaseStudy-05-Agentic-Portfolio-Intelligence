@@ -1,27 +1,47 @@
 from __future__ import annotations
  
+import asyncio
 import json
+from functools import lru_cache
+
 import structlog
  
-from app.services.integration.portfolio_data_service import portfolio_data_service
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
+from app.services.integration.portfolio_data_service import portfolio_data_service
 from app.services.justification.generator import JustificationGenerator
 from app.services.retrieval.dimension_mapper import DimensionMapper
-import asyncio
  
 logger = structlog.get_logger()
  
-cs2_client = CS2Client()
-cs3_client = CS3Client()
-justification_generator = JustificationGenerator()
-dimension_mapper = DimensionMapper()
+
+@lru_cache(maxsize=1)
+def get_cs2_client() -> CS2Client:
+    return CS2Client()
+
+
+@lru_cache(maxsize=1)
+def get_cs3_client() -> CS3Client:
+    return CS3Client()
+
+
+@lru_cache(maxsize=1)
+def get_justification_generator() -> JustificationGenerator:
+    return JustificationGenerator()
+
+
+@lru_cache(maxsize=1)
+def get_dimension_mapper() -> DimensionMapper:
+    return DimensionMapper()
  
+
 async def _run_sync(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
     
+
 async def calculate_org_air_score(arguments: dict) -> str:
     company_id = arguments["company_id"]
+    cs3_client = get_cs3_client()
  
     try:
         assessment = await _run_sync(cs3_client.get_assessment, company_id)
@@ -53,6 +73,8 @@ async def get_company_evidence(arguments: dict) -> str:
     company_id = arguments["company_id"]
     dimension = str(arguments.get("dimension", "all") or "all").strip().lower().replace(" ", "_")
     limit = int(arguments.get("limit", 10) or 10)
+    cs2_client = get_cs2_client()
+    dimension_mapper = get_dimension_mapper()
  
     evidence = await _run_sync(cs2_client.get_evidence, company_id)
 
@@ -97,6 +119,7 @@ async def get_company_evidence(arguments: dict) -> str:
 async def generate_justification(arguments: dict) -> str:
     company_id = arguments["company_id"]
     dimension = arguments["dimension"]
+    justification_generator = get_justification_generator()
  
     result = await _run_sync(
         justification_generator.generate,
@@ -139,6 +162,7 @@ async def project_ebitda_impact(arguments: dict) -> str:
 async def run_gap_analysis(arguments: dict) -> str:
     company_id = arguments["company_id"]
     target_org_air = float(arguments["target_org_air"])
+    cs3_client = get_cs3_client()
  
     assessment = await _run_sync(cs3_client.get_assessment, company_id)
  

@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import json
 import os
 from typing import Any
+
 import structlog
 from mcp.server.fastmcp import FastMCP
+
 from app.mcp.prompts import get_prompt, list_prompt_defs
 from app.mcp.resources import list_resource_defs, read_resource
 from app.mcp.tools import (
@@ -14,7 +17,13 @@ from app.mcp.tools import (
     project_ebitda_impact,
     run_gap_analysis,
 )
+
 logger = structlog.get_logger()
+
+MCP_HOST = os.getenv("MCP_HOST", "127.0.0.1")
+MCP_PORT = int(os.getenv("MCP_PORT", "8000"))
+MCP_PATH = os.getenv("MCP_PATH", "/mcp")
+
 mcp = FastMCP(
     "PE OrgAIR MCP Server",
     instructions=(
@@ -22,6 +31,9 @@ mcp = FastMCP(
         "Exposes scoring, evidence, justification, gap analysis, EBITDA projection, "
         "portfolio summary, resources, and prompts."
     ),
+    host=MCP_HOST,
+    port=MCP_PORT,
+    streamable_http_path=MCP_PATH,
     json_response=True,
 )
 # -------------------------
@@ -162,13 +174,20 @@ async def call_tool(name: str, arguments: dict) -> str:
     return await TOOL_HANDLERS[name](arguments)
 def main() -> None:
     transport = os.getenv("MCP_TRANSPORT", "streamable-http")
-    path = os.getenv("MCP_PATH", "/mcp")
+    if transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+
     logger.info(
         "starting_mcp_server",
         transport=transport,
-        path=path,
+        host=MCP_HOST,
+        port=MCP_PORT,
+        path=MCP_PATH,
     )
-    mcp.run(transport=transport, mount_path=path)
+    mcp.run(transport=transport)
+
+
 if __name__ == "__main__":
     main()
  
