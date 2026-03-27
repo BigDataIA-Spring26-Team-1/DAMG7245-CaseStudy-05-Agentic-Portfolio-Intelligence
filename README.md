@@ -2,6 +2,11 @@
 
 This repository contains the Case Study 5 submission for an agentic private-equity diligence platform built on top of the CS1-CS4 services. The repository has been normalized so the structure matches the implementation: there is one canonical application root, one canonical Streamlit UI entrypoint, one canonical Docker Compose file, and one canonical `exercises` location.
 
+## Live Streamlit Deployment
+
+- Hosted UI: https://agentic-ai-readiness.streamlit.app/
+- Local Streamlit entrypoint: `pe-org-air-platform/streamlit/app.py`
+
 ## What This Repository Includes
 
 - `FastAPI` APIs for companies, evidence, scoring, search, and grounded justification workflows
@@ -153,14 +158,16 @@ The CS5 dashboard itself is rendered from:
 
 ### CS5 Dashboard And Bonus Features
 
-The Streamlit UI now presents a portfolio-first experience with four primary work areas:
+The Streamlit UI presents six primary work areas:
 
-- `Home`
-- `Portfolio Intelligence`
-- `Diligence Workbench`
-- `Advanced Ops`
+- `Portfolio Overview`
+- `Company Drilldown`
+- `Assessment History`
+- `Agentic Due Diligence`
+- `Strategic Outputs`
+- `MCP & Metrics`
 
-Within `Portfolio Intelligence`, the integrated CS5 dashboard provides:
+Across these tabs, the integrated CS5 dashboard provides:
 
 - EV-weighted Fund-AI-R portfolio metrics
 - V^R / H^R scatter analysis
@@ -254,6 +261,7 @@ poetry run streamlit run pe-org-air-platform\streamlit\app.py
 ```
 
 This is the single user-facing UI entrypoint. It includes the CS5 dashboard alongside the earlier case-study controls for scripts, APIs, retrieval, scoring, and results inspection.
+For the hosted deployment, open: https://agentic-ai-readiness.streamlit.app/
 
 The top-level navigation is intentionally curated:
 
@@ -334,7 +342,7 @@ Important locations:
   Company-specific outputs and evidence-backed artifacts.
 - `results/bonus/documents/`
   IC memos and LP letters.
-- `results/bonus/mem0_memory.json`
+- `results/bonus/mem0_memory.json` (created after memory operations run)
   Semantic memory records.
 - `results/bonus/investment_tracker.json`
   ROI and investment tracking records.
