@@ -6,6 +6,7 @@ import structlog
 from app.services.integration.cs1_client import CS1Client
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
+from app.services.integration.cs4_client import CS4Client
 logger = structlog.get_logger()
 
 async def _run_sync(func, *args, **kwargs):
@@ -32,6 +33,7 @@ class PortfolioDataService:
         self.cs1 = CS1Client()
         self.cs2 = CS2Client()
         self.cs3 = CS3Client()
+        self.cs4 = CS4Client()
     async def get_portfolio_view(self, fund_id: str) -> List[PortfolioCompanyView]:
         logger.info("portfolio_view_requested", fund_id=fund_id)
         # ✅ FIXED: wrap sync call
@@ -95,6 +97,13 @@ class PortfolioDataService:
             if company.company_id == company_id:
                 return company
         raise ValueError(f"Company {company_id} not found in portfolio")
-    
+    async def get_company_justifications(self, company_id: str, dimensions: list[str]) -> dict[str, dict]:
+        results: dict[str, dict] = {}
+        for dim in dimensions:
+            try:
+                results[dim] = await self.cs4.generate_justification(company_id, dim)
+            except Exception:
+                results[dim] = {}
+        return results
 portfolio_data_service = PortfolioDataService()
  

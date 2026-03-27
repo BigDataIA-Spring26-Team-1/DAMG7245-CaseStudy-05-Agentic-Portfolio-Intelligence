@@ -191,16 +191,34 @@ async def run_gap_analysis(arguments: dict) -> str:
 async def get_portfolio_summary(arguments: dict) -> str:
     fund_id = arguments["fund_id"]
     portfolio = await portfolio_data_service.get_portfolio_view(fund_id)
- 
-    fund_air = sum(c.org_air for c in portfolio) / len(portfolio) if portfolio else 0.0
- 
+
+    from app.services.analytics.fund_air import fund_air_calculator
+
+    enterprise_values = {c.company_id: 100.0 for c in portfolio}
+
+    metrics = fund_air_calculator.calculate_fund_metrics(
+        fund_id=fund_id,
+        companies=portfolio,
+        enterprise_values=enterprise_values,
+    )
+
     return json.dumps(
         {
-            "fund_id": fund_id,
-            "fund_air": round(fund_air, 1),
-            "company_count": len(portfolio),
+            "fund_id": metrics.fund_id,
+            "fund_air": metrics.fund_air,
+            "company_count": metrics.company_count,
+            "quartile_distribution": metrics.quartile_distribution,
+            "sector_hhi": metrics.sector_hhi,
+            "avg_delta_since_entry": metrics.avg_delta_since_entry,
+            "ai_leaders_count": metrics.ai_leaders_count,
+            "ai_laggards_count": metrics.ai_laggards_count,
             "companies": [
-                {"ticker": c.ticker, "org_air": c.org_air, "sector": c.sector}
+                {
+                    "ticker": c.ticker,
+                    "org_air": c.org_air,
+                    "sector": c.sector,
+                    "delta_since_entry": c.delta_since_entry,
+                }
                 for c in portfolio
             ],
         },

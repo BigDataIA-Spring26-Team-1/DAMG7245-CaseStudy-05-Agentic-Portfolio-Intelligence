@@ -39,19 +39,19 @@ mcp = FastMCP(
 # -------------------------
 # Tools
 # -------------------------
-@mcp.tool()
-async def calculate_org_air_score_tool(company_id: str) -> dict[str, Any]:
-    """Calculate and return Org-AI-R scoring output for a company."""
+@mcp.tool(name="calculate_org_air_score")
+async def calculate_org_air_score_mcp(company_id: str) -> dict[str, Any]:
     logger.info("mcp_tool_call", tool="calculate_org_air_score", company_id=company_id)
     payload = await calculate_org_air_score({"company_id": company_id})
     return json.loads(payload)
-@mcp.tool()
-async def get_company_evidence_tool(
+
+
+@mcp.tool(name="get_company_evidence")
+async def get_company_evidence_mcp(
     company_id: str,
     dimension: str = "all",
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Return evidence items for a company, optionally filtered by dimension."""
     logger.info(
         "mcp_tool_call",
         tool="get_company_evidence",
@@ -67,9 +67,10 @@ async def get_company_evidence_tool(
         }
     )
     return json.loads(payload)
-@mcp.tool()
-async def generate_justification_tool(company_id: str, dimension: str) -> dict[str, Any]:
-    """Generate grounded score justification for a company dimension."""
+
+
+@mcp.tool(name="generate_justification")
+async def generate_justification_mcp(company_id: str, dimension: str) -> dict[str, Any]:
     logger.info(
         "mcp_tool_call",
         tool="generate_justification",
@@ -83,14 +84,15 @@ async def generate_justification_tool(company_id: str, dimension: str) -> dict[s
         }
     )
     return json.loads(payload)
-@mcp.tool()
-async def project_ebitda_impact_tool(
+
+
+@mcp.tool(name="project_ebitda_impact")
+async def project_ebitda_impact_mcp(
     company_id: str,
     entry_score: float,
     target_score: float,
     h_r_score: float,
 ) -> dict[str, Any]:
-    """Project EBITDA impact based on score uplift and risk adjustment."""
     logger.info(
         "mcp_tool_call",
         tool="project_ebitda_impact",
@@ -105,9 +107,10 @@ async def project_ebitda_impact_tool(
         }
     )
     return json.loads(payload)
-@mcp.tool()
-async def run_gap_analysis_tool(company_id: str, target_org_air: float) -> dict[str, Any]:
-    """Run dimension gap analysis for a company against a target Org-AI-R score."""
+
+
+@mcp.tool(name="run_gap_analysis")
+async def run_gap_analysis_mcp(company_id: str, target_org_air: float) -> dict[str, Any]:
     logger.info(
         "mcp_tool_call",
         tool="run_gap_analysis",
@@ -121,9 +124,10 @@ async def run_gap_analysis_tool(company_id: str, target_org_air: float) -> dict[
         }
     )
     return json.loads(payload)
-@mcp.tool()
-async def get_portfolio_summary_tool(fund_id: str) -> dict[str, Any]:
-    """Return portfolio/fund summary including Fund-AI-R style aggregate metrics."""
+
+
+@mcp.tool(name="get_portfolio_summary")
+async def get_portfolio_summary_mcp(fund_id: str) -> dict[str, Any]:
     logger.info("mcp_tool_call", tool="get_portfolio_summary", fund_id=fund_id)
     payload = await get_portfolio_summary({"fund_id": fund_id})
     return json.loads(payload)
