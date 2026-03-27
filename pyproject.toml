@@ -81,6 +81,7 @@ watchfiles = "1.1.1"
 websockets = "16.0"
 chromadb = "^1.5.1"
 litellm = "^1.82.1"
+mcp = "^1.26.0"
 
 [tool.poetry.group.dev.dependencies]
 hypothesis = "^6.125.0"

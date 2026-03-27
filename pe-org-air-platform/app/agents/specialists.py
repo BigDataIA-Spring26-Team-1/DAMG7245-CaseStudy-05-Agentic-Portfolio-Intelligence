@@ -11,25 +11,16 @@ from app.agents.state import DueDiligenceState
 from app.config import settings
 from app.services.observability.metrics import track_agent
 from app.mcp.server import call_tool
+from app.mcp.client import MCPClient
 logger = structlog.get_logger()
-
-
 async def get_evidence(company_id: str, dimension: str = "all") -> str:
     return await call_tool("get_company_evidence", {"company_id": company_id, "dimension": dimension})
-
-
 async def get_org_air_score(company_id: str) -> str:
     return await call_tool("calculate_org_air_score", {"company_id": company_id})
-
-
 async def get_justification(company_id: str, dimension: str) -> str:
     return await call_tool("generate_justification", {"company_id": company_id, "dimension": dimension})
-
-
 async def get_gap_analysis(company_id: str, target: float) -> str:
     return await call_tool("run_gap_analysis", {"company_id": company_id, "target_org_air": target})
-
-
 async def get_ebitda_projection(
     company_id: str, entry_score: float, target_score: float, h_r_score: float
 ) -> str:
@@ -96,18 +87,14 @@ class MultiLLM:
         )
 class MCPToolCaller:
     """
-    Real MCP transport bridge via the server's HTTP MCP endpoint.
-    Assumes the MCP server is running with Streamable HTTP transport.
+    Real MCP client bridge.
     """
-    def __init__(self, base_url: str = "http://127.0.0.1:8000/mcp") -> None:
-        self.base_url = base_url.rstrip("/")
-        self.client = httpx.AsyncClient(timeout=60.0)
+    def __init__(self) -> None:
+        self.client = MCPClient()
     async def call_tool(self, tool_name: str, arguments: dict) -> str:
-        # Temporary bridge:
-        # while the agent layer is still custom, hit the compatibility REST shim if you add one,
-        # or keep the compatibility dispatcher until the client is upgraded to a full MCP client.
-        from app.mcp.server import call_tool
-        return await call_tool(tool_name, arguments)
+        return await self.client.call_tool(tool_name, arguments)
+mcp_client = MCPToolCaller()
+
 class SECAnalysisAgent:
     """
     Agent focused on SEC / evidence-led platform assessment.
