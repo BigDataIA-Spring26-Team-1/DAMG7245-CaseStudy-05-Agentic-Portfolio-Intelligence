@@ -21,6 +21,7 @@ langchain = "^1.2.13"
 httpx = "^0.28.1"
 langchain-google-genai = "^4.2.1"
 langchain-openai = "^1.1.12"
+mcp = "^1.26.0"
 
 [tool.poetry.group.backend.dependencies]
 annotated-doc = "0.0.4"
