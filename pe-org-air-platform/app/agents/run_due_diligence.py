@@ -23,6 +23,7 @@ async def run_due_diligence(company_id: str, assessment_type: str = "full") -> D
         "completed_at": None,
         "total_tokens": 0,
         "error": None,
+        "memory_record_id": None,
     }
     config = {
         "configurable": {

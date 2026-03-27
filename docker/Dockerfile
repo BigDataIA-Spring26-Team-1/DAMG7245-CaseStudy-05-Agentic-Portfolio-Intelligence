@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /workspace
 
 # Install system dependencies (Snowflake + build tools)
 RUN apt-get update && apt-get install -y \
@@ -11,17 +11,20 @@ RUN apt-get update && apt-get install -y \
 # Create non-root user
 RUN useradd --create-home --uid 10001 appuser
 
-# Copy requirements first (better caching)
-COPY requirements.txt .
-
+# Install Poetry and application dependencies
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir poetry==1.8.3
 
-# Copy app code
-COPY . .
-RUN chown -R appuser:appuser /app
+COPY pyproject.toml poetry.lock README.md /workspace/
+COPY pe-org-air-platform /workspace/pe-org-air-platform
+
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-root --no-interaction --no-ansi --without dev --with backend
+
+RUN chown -R appuser:appuser /workspace
 
 USER appuser
+WORKDIR /workspace/pe-org-air-platform
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/openapi.json || exit 1

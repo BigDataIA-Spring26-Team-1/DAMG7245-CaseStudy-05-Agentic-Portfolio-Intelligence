@@ -28,4 +28,5 @@ class DueDiligenceState(TypedDict):
     completed_at: Optional[datetime]
     total_tokens: int
     error: Optional[str]
+    memory_record_id: Optional[str]
  

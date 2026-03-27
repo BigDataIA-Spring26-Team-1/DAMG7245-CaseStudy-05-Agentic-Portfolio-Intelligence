@@ -1,10 +1,12 @@
 from __future__ import annotations
+import asyncio
 from datetime import datetime
 from typing import Any, Dict
 import structlog
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from app.agents.state import DueDiligenceState
+from app.bonus_facade import remember_due_diligence_state
 from app.agents.specialists import (
     evidence_agent,
     scoring_agent,
@@ -66,8 +68,15 @@ async def hitl_approval_node(state: DueDiligenceState) -> Dict[str, Any]:
         ],
     }
 async def complete_node(state: DueDiligenceState) -> Dict[str, Any]:
+    memory_record_id = None
+    try:
+        memory_payload = await asyncio.to_thread(remember_due_diligence_state, state)
+        memory_record_id = memory_payload.get("memory_id")
+    except Exception as exc:
+        logger.warning("failed_to_persist_due_diligence_memory", error=str(exc))
     return {
         "completed_at": datetime.utcnow(),
+        "memory_record_id": memory_record_id,
         "messages": [
             {
                 "role": "assistant",

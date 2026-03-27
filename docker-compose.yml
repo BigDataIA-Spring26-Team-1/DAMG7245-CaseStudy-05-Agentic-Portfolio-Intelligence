@@ -1,7 +1,7 @@
 services:
   rag-api:
     build:
-      context: ./pe-org-air-platform
+      context: .
       dockerfile: docker/Dockerfile
     container_name: pe-rag-api
     env_file:

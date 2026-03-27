@@ -1,6 +1,9 @@
 from __future__ import annotations
  
 import json
+
+from app.bonus_facade import get_investment_summary, memory_stats
+from app.services.value_creation import ORG_AIR_PARAMETERS_V2, SECTOR_DEFINITIONS
  
  
 def list_resource_defs() -> list[dict]:
@@ -15,30 +18,26 @@ def list_resource_defs() -> list[dict]:
             "name": "Sector Definitions",
             "description": "Sector baselines and sector-specific reference values",
         },
+        {
+            "uri": "orgair://extensions/bonus",
+            "name": "Bonus Deliverables Overview",
+            "description": "Mem0 memory stats and investment tracker snapshot",
+        },
     ]
  
  
 def read_resource(uri: str) -> str:
     if uri == "orgair://parameters/v2.0":
-        return json.dumps(
-            {
-                "version": "2.0",
-                "alpha": 0.60,
-                "beta": 0.12,
-                "delta": 0.15,
-            },
-            indent=2,
-        )
+        return json.dumps(ORG_AIR_PARAMETERS_V2, indent=2)
  
     if uri == "orgair://sectors":
+        return json.dumps(SECTOR_DEFINITIONS, indent=2)
+
+    if uri == "orgair://extensions/bonus":
         return json.dumps(
             {
-                "technology": {"h_r_base": 85},
-                "healthcare": {"h_r_base": 75},
-                "financial_services": {"h_r_base": 78},
-                "manufacturing": {"h_r_base": 68},
-                "retail": {"h_r_base": 72},
-                "energy": {"h_r_base": 60},
+                "memory": memory_stats(),
+                "default_fund_tracker": get_investment_summary(fund_id="growth_fund_v"),
             },
             indent=2,
         )

@@ -83,6 +83,12 @@ def _install_mcp_test_stubs(monkeypatch) -> None:
     tools_module.project_ebitda_impact = _tool
     tools_module.run_gap_analysis = _tool
     tools_module.get_portfolio_summary = _tool
+    tools_module.remember_company_memory = _tool
+    tools_module.recall_company_memory = _tool
+    tools_module.record_investment_roi = _tool
+    tools_module.get_investment_tracker_summary = _tool
+    tools_module.generate_ic_memo = _tool
+    tools_module.generate_lp_letter = _tool
 
     monkeypatch.setitem(sys.modules, "app.mcp.tools", tools_module)
     sys.modules.pop("app.mcp.server", None)

@@ -18,8 +18,8 @@ services:
 
   airflow-init:
     build:
-      context: ../../..
-      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+      context: ../..
+      dockerfile: docker/airflow/Dockerfile
     depends_on:
       airflow-postgres:
         condition: service_healthy
@@ -31,9 +31,9 @@ services:
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
       PYTHONPATH: /opt/airflow/project/pe-org-air-platform
     env_file:
-      - ../../.env
+      - ../../pe-org-air-platform/.env
     volumes:
-      - ../../../:/opt/airflow/project
+      - ../../:/opt/airflow/project
       - airflow_logs:/opt/airflow/logs
     command: >
       bash -c "
@@ -44,8 +44,8 @@ services:
 
   airflow-webserver:
     build:
-      context: ../../..
-      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+      context: ../..
+      dockerfile: docker/airflow/Dockerfile
     restart: unless-stopped
     depends_on:
       airflow-postgres:
@@ -61,18 +61,18 @@ services:
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
       PYTHONPATH: /opt/airflow/project/pe-org-air-platform
     env_file:
-      - ../../.env
+      - ../../pe-org-air-platform/.env
     ports:
       - "8081:8080"
     volumes:
-      - ../../../:/opt/airflow/project
+      - ../../:/opt/airflow/project
       - airflow_logs:/opt/airflow/logs
     command: webserver
 
   airflow-scheduler:
     build:
-      context: ../../..
-      dockerfile: pe-org-air-platform/docker/airflow/Dockerfile
+      context: ../..
+      dockerfile: docker/airflow/Dockerfile
     restart: unless-stopped
     depends_on:
       airflow-postgres:
@@ -87,9 +87,9 @@ services:
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/pe-org-air-platform/dags
       PYTHONPATH: /opt/airflow/project/pe-org-air-platform
     env_file:
-      - ../../.env
+      - ../../pe-org-air-platform/.env
     volumes:
-      - ../../../:/opt/airflow/project
+      - ../../:/opt/airflow/project
       - airflow_logs:/opt/airflow/logs
     command: scheduler
 

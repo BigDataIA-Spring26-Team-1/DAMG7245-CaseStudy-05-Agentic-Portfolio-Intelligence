@@ -57,7 +57,6 @@ def _compile_targets() -> CheckResult:
         ROOT / "scripts" / "test_everything.py",
         ROOT / "exercises" / "agentic_due_diligence.py",
         ROOT / "exercises" / "complete_pipeline.py",
-        REPO_ROOT / "exercises" / "complete_pipeline.py",
     ]
 
     for target in targets:
@@ -114,8 +113,8 @@ def _openapi_smoke() -> CheckResult:
 def _exercise_help_smoke() -> CheckResult:
     return _run_command(
         name="exercise_help",
-        command=[sys.executable, str(REPO_ROOT / "exercises" / "complete_pipeline.py"), "--help"],
-        cwd=REPO_ROOT,
+        command=[sys.executable, str(ROOT / "exercises" / "complete_pipeline.py"), "--help"],
+        cwd=ROOT,
     )
 
 
@@ -144,7 +143,7 @@ def _live_pipeline_smoke(identifier: str, dimension: str, top_k: int) -> CheckRe
         name="live_pipeline",
         command=[
             sys.executable,
-            str(REPO_ROOT / "exercises" / "complete_pipeline.py"),
+            str(ROOT / "exercises" / "complete_pipeline.py"),
             "--identifier",
             identifier,
             "--dimension",
@@ -153,7 +152,7 @@ def _live_pipeline_smoke(identifier: str, dimension: str, top_k: int) -> CheckRe
             str(top_k),
             "--json",
         ],
-        cwd=REPO_ROOT,
+        cwd=ROOT,
         env=env,
     )
 

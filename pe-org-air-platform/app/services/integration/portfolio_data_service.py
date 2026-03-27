@@ -41,6 +41,8 @@ class PortfolioCompanyView:
     entry_org_air: float
     delta_since_entry: float
     evidence_count: int
+    enterprise_value_mm: float
+    enterprise_value_source: str
 
 
 class PortfolioDataService:
@@ -58,10 +60,11 @@ class PortfolioDataService:
 
     async def get_portfolio_view(self, fund_id: str) -> List[PortfolioCompanyView]:
         logger.info("portfolio_view_requested", fund_id=fund_id)
-        companies = await _run_sync(self.cs1.get_portfolio_companies, fund_id)
+        holdings = await _run_sync(self.cs1.get_portfolio_holdings, fund_id)
         portfolio: List[PortfolioCompanyView] = []
 
-        for company in companies:
+        for holding in holdings:
+            company = holding.company
             company_id = str(getattr(company, "company_id", "") or getattr(company, "id", "") or "")
             ticker = str(getattr(company, "ticker", "") or company_id)
             if not company_id:
@@ -71,7 +74,10 @@ class PortfolioDataService:
             try:
                 assessment = await _run_sync(self.cs3.get_assessment, company_id)
                 evidence = await _run_sync(self.cs2.get_evidence, company_id)
-                entry_score = await self._get_entry_score(company_id, assessment.org_air_score)
+                entry_score = float(holding.entry_org_air) if holding.entry_org_air is not None else await self._get_entry_score(
+                    company_id,
+                    assessment.org_air_score,
+                )
 
                 portfolio.append(
                     PortfolioCompanyView(
@@ -91,6 +97,8 @@ class PortfolioDataService:
                         entry_org_air=entry_score,
                         delta_since_entry=float(assessment.org_air_score) - entry_score,
                         evidence_count=len(evidence),
+                        enterprise_value_mm=float(holding.enterprise_value_mm),
+                        enterprise_value_source=str(holding.enterprise_value_source),
                     )
                 )
             except Exception as exc:
@@ -133,6 +141,13 @@ class PortfolioDataService:
             if company.company_id == company_id or company.ticker == company_id:
                 return company
         raise ValueError(f"Company {company_id} not found in portfolio")
+
+    async def get_portfolio_enterprise_values(self, fund_id: str) -> dict[str, float]:
+        portfolio = await self.get_portfolio_view(fund_id)
+        return {
+            company.company_id: float(company.enterprise_value_mm)
+            for company in portfolio
+        }
 
     async def get_company_justifications(self, company_id: str, dimensions: list[str]) -> dict[str, dict]:
         results: dict[str, dict] = {}

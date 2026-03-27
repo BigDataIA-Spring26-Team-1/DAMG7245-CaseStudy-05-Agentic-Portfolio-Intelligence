@@ -7,10 +7,14 @@ import shlex
 import subprocess
 import sys
 import importlib.util
+import importlib
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import streamlit as st
 
@@ -19,12 +23,45 @@ import streamlit as st
 # script module name in Streamlit Cloud.
 STREAMLIT_DIR = Path(__file__).resolve().parent
 APP_ROOT_DIR = STREAMLIT_DIR.parents[0]
-UI_PRESENTERS_PATH = APP_ROOT_DIR / "app" / "ui_presenters.py"
-ui_presenters_spec = importlib.util.spec_from_file_location("orgair_ui_presenters", UI_PRESENTERS_PATH)
-if ui_presenters_spec is None or ui_presenters_spec.loader is None:
-    raise ImportError(f"Unable to load UI presenters from {UI_PRESENTERS_PATH}")
-ui_presenters = importlib.util.module_from_spec(ui_presenters_spec)
-ui_presenters_spec.loader.exec_module(ui_presenters)
+if str(APP_ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT_DIR))
+
+
+def _ensure_backend_app_package() -> None:
+    backend_package_dir = APP_ROOT_DIR / "app"
+    current_app_module = sys.modules.get("app")
+    if current_app_module is not None:
+        current_paths = getattr(current_app_module, "__path__", None)
+        if current_paths and str(backend_package_dir) in {str(Path(path)) for path in current_paths}:
+            return
+
+        current_file = getattr(current_app_module, "__file__", None)
+        if current_file:
+            try:
+                if Path(current_file).resolve() == Path(__file__).resolve():
+                    sys.modules["orgair_streamlit_entrypoint"] = current_app_module
+            except OSError:
+                pass
+
+        sys.modules.pop("app", None)
+
+    backend_app_spec = importlib.util.spec_from_file_location(
+        "app",
+        backend_package_dir / "__init__.py",
+        submodule_search_locations=[str(backend_package_dir)],
+    )
+    if backend_app_spec is None or backend_app_spec.loader is None:
+        raise ImportError(f"Unable to load backend app package from {backend_package_dir}")
+
+    backend_app_module = importlib.util.module_from_spec(backend_app_spec)
+    sys.modules["app"] = backend_app_module
+    backend_app_spec.loader.exec_module(backend_app_module)
+
+
+_ensure_backend_app_package()
+
+ui_presenters = importlib.import_module("app.ui_presenters")
+dashboard_view = importlib.import_module("app.dashboard.view")
 
 compact_recommendation = ui_presenters.compact_recommendation
 display_evidence_count = ui_presenters.display_evidence_count
@@ -69,6 +106,93 @@ RESULT_CATEGORIES = [
     "scoring",
     "retrieval",
     "validation",
+]
+
+CATEGORY_LABELS = {
+    "cs4": "Diligence Narrative",
+    "evidence": "Evidence Lake",
+    "signals": "Signal Capture",
+    "signal_scores": "Signal Scoring",
+    "signal_summaries": "Signal Summaries",
+    "scoring": "OrgAIR Scoring",
+    "retrieval": "Retrieval QA",
+    "validation": "Portfolio Validation",
+}
+
+PIPELINE_BLUEPRINT = [
+    {
+        "title": "Evidence Ingestion",
+        "description": "SEC evidence collection, parsing, chunking, and local artifact mirroring.",
+        "categories": ["evidence"],
+        "scope": "ticker",
+        "accent": "#2f7cf6",
+    },
+    {
+        "title": "Signal Harvesting",
+        "description": "Jobs, patents, tech stack, and external signal capture across the portfolio.",
+        "categories": ["signals"],
+        "scope": "ticker",
+        "accent": "#28a59c",
+    },
+    {
+        "title": "Signal Scoring",
+        "description": "Normalized company signal scores and summary rollups for each name.",
+        "categories": ["signal_scores", "signal_summaries"],
+        "scope": "ticker",
+        "accent": "#6e86ff",
+    },
+    {
+        "title": "OrgAIR Scoring",
+        "description": "Dimension scoring, confidence, and composite readiness outputs for each company.",
+        "categories": ["scoring"],
+        "scope": "ticker",
+        "accent": "#c8a977",
+    },
+    {
+        "title": "Portfolio Validation",
+        "description": "Portfolio-level validation checks and scoring envelope review.",
+        "categories": ["validation"],
+        "scope": "portfolio",
+        "accent": "#3ecf8e",
+    },
+    {
+        "title": "Diligence Narrative",
+        "description": "Generated justifications, diligence narrative, and investment packet artifacts.",
+        "categories": ["cs4"],
+        "scope": "ticker",
+        "accent": "#f08a5d",
+    },
+]
+
+REPORT_BLUEPRINT = [
+    {
+        "title": "Investment Committee Memo",
+        "description": "Company-level memo export in Markdown and Word format.",
+        "type": "document_prefix",
+        "value": "ic_memo_",
+        "accent": "#c8a977",
+    },
+    {
+        "title": "LP Update Letter",
+        "description": "Portfolio-level investor update with Fund-AI-R and ROI context.",
+        "type": "document_prefix",
+        "value": "lp_letter_",
+        "accent": "#2f7cf6",
+    },
+    {
+        "title": "Semantic Memory",
+        "description": "Reusable diligence memory captured across companies and funds.",
+        "type": "json_records",
+        "value": "mem0_memory.json",
+        "accent": "#28a59c",
+    },
+    {
+        "title": "Value Creation Tracker",
+        "description": "Active program tracking with ROI, MOIC, and value realization context.",
+        "type": "json_records",
+        "value": "investment_tracker.json",
+        "accent": "#3ecf8e",
+    },
 ]
 
 
@@ -193,280 +317,421 @@ def _inject_ui_theme() -> None:
     st.markdown(
         """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap');
 
 :root {
-    --ui-ink: #e8f1ff;
-    --ui-muted: #9eb3cc;
-    --ui-accent: #2c8bff;
-    --ui-accent-soft: #31c6e6;
-    --ui-gold: #f7b955;
-    --ui-border: #2a3d57;
-    --ui-card: rgba(14, 24, 38, 0.88);
+    --ui-bg: #06111c;
+    --ui-bg-soft: #0c1a29;
+    --ui-panel: rgba(12, 23, 37, 0.9);
+    --ui-panel-strong: rgba(10, 18, 30, 0.94);
+    --ui-border: rgba(96, 122, 152, 0.32);
+    --ui-border-strong: rgba(200, 169, 119, 0.28);
+    --ui-ink: #f5f7fb;
+    --ui-muted: #93a8bf;
+    --ui-blue: #2f7cf6;
+    --ui-teal: #28a59c;
+    --ui-gold: #c8a977;
+    --ui-gold-soft: #f2dfbc;
+    --ui-emerald: #3ecf8e;
+    --ui-coral: #f08a5d;
 }
 
 html, body, [class*="css"] {
-    font-family: "Manrope", "Segoe UI", "Trebuchet MS", sans-serif;
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
     color: var(--ui-ink);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Outfit", "IBM Plex Sans", sans-serif !important;
+    letter-spacing: -0.02em;
 }
 
 .stApp {
     background:
-        radial-gradient(1000px 600px at 10% -15%, rgba(44, 139, 255, 0.22) 0%, transparent 60%),
-        radial-gradient(1200px 680px at 96% -18%, rgba(49, 198, 230, 0.18) 0%, transparent 62%),
-        linear-gradient(180deg, #070e18 0%, #0c1726 58%, #111b2c 100%);
+        radial-gradient(1100px 520px at 8% -10%, rgba(47, 124, 246, 0.16) 0%, transparent 58%),
+        radial-gradient(900px 480px at 94% -8%, rgba(200, 169, 119, 0.14) 0%, transparent 56%),
+        linear-gradient(180deg, #040b13 0%, #07111b 42%, #091520 100%);
 }
 
 [data-testid="stHeader"] {
     background: transparent;
 }
 
+[data-testid="stToolbar"] {
+    visibility: hidden;
+}
+
 .block-container {
-    padding-top: 1rem;
+    padding-top: 1.1rem;
     padding-bottom: 3rem;
+    max-width: 1420px;
 }
 
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0a121f 0%, #0f2136 100%);
+    background:
+        radial-gradient(600px 220px at 0% 0%, rgba(47, 124, 246, 0.14), transparent 56%),
+        linear-gradient(180deg, #081320 0%, #0b1624 100%);
+    border-right: 1px solid rgba(96, 122, 152, 0.22);
 }
 
 section[data-testid="stSidebar"] * {
-    color: #dce8f8 !important;
+    color: #e7eef7 !important;
+}
+
+[data-testid="stMetric"] {
+    background: linear-gradient(180deg, rgba(13, 25, 39, 0.96), rgba(9, 17, 28, 0.96));
+    border: 1px solid var(--ui-border);
+    border-radius: 18px;
+    padding: 0.4rem 0.55rem;
+    box-shadow: 0 16px 34px rgba(1, 6, 12, 0.34);
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 div[data-baseweb="tab-list"] {
-    gap: 0.35rem;
+    gap: 0.45rem;
     padding: 0.35rem;
+    border-radius: 16px;
     border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: rgba(8, 16, 28, 0.8);
-    backdrop-filter: blur(6px);
+    background: rgba(9, 18, 31, 0.88);
+    backdrop-filter: blur(10px);
 }
 
 button[data-baseweb="tab"] {
-    border-radius: 10px !important;
-    padding: 0.4rem 0.9rem !important;
+    border-radius: 12px !important;
+    padding: 0.48rem 0.95rem !important;
+    font-family: "Outfit", "IBM Plex Sans", sans-serif !important;
     font-weight: 700 !important;
-    color: #9cb2cb !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    color: #94abc3 !important;
+    transition: transform 0.18s ease, color 0.18s ease, box-shadow 0.2s ease;
 }
 
 button[data-baseweb="tab"]:hover {
     transform: translateY(-1px);
+    color: #eef4fb !important;
 }
 
 button[data-baseweb="tab"][aria-selected="true"] {
     color: #ffffff !important;
-    background: linear-gradient(90deg, var(--ui-accent) 0%, #22a5ff 100%) !important;
-    box-shadow: 0 7px 16px rgba(34, 165, 255, 0.32);
+    background: linear-gradient(90deg, rgba(47, 124, 246, 0.92), rgba(40, 165, 156, 0.88)) !important;
+    box-shadow: 0 10px 26px rgba(24, 84, 172, 0.36);
 }
 
 div.stButton > button,
 div.stDownloadButton > button,
 div[data-testid="stForm"] button[kind] {
-    position: relative;
-    overflow: hidden;
     border: 0;
-    border-radius: 12px;
+    border-radius: 14px;
+    font-family: "Outfit", "IBM Plex Sans", sans-serif;
     font-weight: 700;
-    letter-spacing: 0.2px;
     color: #ffffff;
-    background: linear-gradient(135deg, var(--ui-accent) 0%, #249bff 58%, var(--ui-accent-soft) 100%);
-    box-shadow: 0 8px 22px rgba(44, 139, 255, 0.34);
-    transition: transform 0.18s ease, box-shadow 0.22s ease, filter 0.18s ease;
+    background: linear-gradient(135deg, rgba(47, 124, 246, 1) 0%, rgba(30, 103, 215, 1) 54%, rgba(40, 165, 156, 1) 100%);
+    box-shadow: 0 14px 28px rgba(12, 47, 99, 0.34);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 div.stButton > button:hover,
 div.stDownloadButton > button:hover,
 div[data-testid="stForm"] button[kind]:hover {
-    transform: translateY(-2px) scale(1.01);
-    box-shadow: 0 12px 28px rgba(44, 139, 255, 0.38);
+    transform: translateY(-2px);
+    box-shadow: 0 16px 34px rgba(12, 47, 99, 0.4);
 }
 
-div.stButton > button::after,
-div.stDownloadButton > button::after,
-div[data-testid="stForm"] button[kind]::after {
-    content: "";
-    position: absolute;
-    inset: -55%;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0) 68%);
-    opacity: 0;
-    transform: scale(0.4);
-    pointer-events: none;
-}
-
-div.stButton > button:active,
-div.stDownloadButton > button:active,
-div[data-testid="stForm"] button[kind]:active {
-    transform: scale(0.97);
-    animation: click-pop 0.33s ease, click-flash 0.5s ease;
-}
-
-div.stButton > button:active::after,
-div.stDownloadButton > button:active::after,
-div[data-testid="stForm"] button[kind]:active::after {
-    animation: click-ripple 0.55s ease-out;
+div.stTextInput > div > div > input,
+div.stNumberInput > div > div > input,
+div.stTextArea textarea {
+    border-radius: 14px !important;
+    border: 1px solid var(--ui-border) !important;
+    background: rgba(9, 18, 31, 0.95) !important;
+    color: var(--ui-ink) !important;
 }
 
 div[data-testid="stDataFrame"],
-div[data-testid="stTable"] {
+div[data-testid="stTable"],
+div[data-testid="stCodeBlock"] pre,
+div.streamlit-expanderContent {
+    border-radius: 18px;
     border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 10px 24px rgba(1, 8, 16, 0.45);
+    background: rgba(8, 16, 27, 0.9) !important;
+    box-shadow: 0 14px 28px rgba(1, 6, 12, 0.28);
 }
 
-div[data-testid="stMetric"] {
-    background: var(--ui-card);
-    border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    box-shadow: 0 8px 20px rgba(0, 8, 18, 0.4);
+.top-ribbon {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.8rem;
+    padding: 0.65rem 0.95rem;
+    border: 1px solid rgba(96, 122, 152, 0.2);
+    border-radius: 999px;
+    background: rgba(9, 18, 31, 0.72);
+}
+
+.top-ribbon-copy {
+    color: var(--ui-muted);
+    font-size: 0.84rem;
 }
 
 .hero-shell {
     position: relative;
-    margin-bottom: 1rem;
-    border: 1px solid rgba(90, 132, 182, 0.35);
-    border-radius: 24px;
     overflow: hidden;
+    margin-bottom: 1rem;
+    border-radius: 30px;
+    border: 1px solid rgba(96, 122, 152, 0.22);
     background:
-        radial-gradient(700px 280px at 8% 0%, rgba(49, 198, 230, 0.16), transparent 58%),
-        radial-gradient(820px 320px at 100% 0%, rgba(44, 139, 255, 0.18), transparent 62%),
-        linear-gradient(135deg, rgba(7, 16, 29, 0.96), rgba(15, 28, 46, 0.9));
-    box-shadow: 0 26px 58px rgba(1, 9, 20, 0.42);
+        radial-gradient(720px 280px at 0% 0%, rgba(47, 124, 246, 0.18) 0%, transparent 62%),
+        radial-gradient(760px 320px at 100% 0%, rgba(200, 169, 119, 0.14) 0%, transparent 66%),
+        linear-gradient(145deg, rgba(8, 16, 27, 0.98) 0%, rgba(11, 23, 37, 0.96) 52%, rgba(7, 15, 25, 0.98) 100%);
+    box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+}
+
+.hero-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(125deg, transparent 0%, rgba(255, 255, 255, 0.03) 34%, transparent 68%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 130px);
+    pointer-events: none;
 }
 
 .hero-grid {
+    position: relative;
     display: grid;
-    grid-template-columns: 1.35fr 0.95fr;
+    grid-template-columns: 1.32fr 0.92fr;
     gap: 1rem;
-    padding: 1.35rem;
+    padding: 1.5rem;
+}
+
+.hero-kicker,
+.section-label,
+.insight-kicker {
+    color: var(--ui-gold-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.74rem;
+    font-weight: 700;
 }
 
 .hero-title {
-    margin: 0;
-    font-size: 2.2rem;
+    margin: 0.45rem 0 0;
+    max-width: 12ch;
+    font-size: 3rem;
+    line-height: 0.95;
     font-weight: 800;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
 }
 
 .hero-copy {
-    margin: 0.75rem 0 0;
-    max-width: 55rem;
-    color: #bfd1e6;
-    font-size: 1rem;
-    line-height: 1.6;
+    margin: 0.95rem 0 0;
+    max-width: 46rem;
+    color: #c7d4e2;
+    font-size: 1.02rem;
+    line-height: 1.68;
 }
 
-.hero-chip-row {
+.hero-chip-row,
+.micro-pill-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.55rem;
     margin-top: 1rem;
 }
 
-.hero-chip {
-    padding: 0.42rem 0.72rem;
+.hero-chip,
+.micro-pill {
+    padding: 0.42rem 0.74rem;
     border-radius: 999px;
-    border: 1px solid rgba(125, 167, 219, 0.28);
-    background: rgba(255, 255, 255, 0.05);
-    color: #dbe7f6;
-    font-size: 0.84rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    border: 1px solid rgba(200, 169, 119, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: #ecf2f8;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.hero-side {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.hero-panel,
+.insight-card,
+.nav-card,
+.pipeline-card,
+.report-card,
+.dashboard-band {
+    border-radius: 22px;
+    border: 1px solid var(--ui-border);
+    background: linear-gradient(180deg, rgba(12, 23, 37, 0.9), rgba(8, 16, 27, 0.92));
+    box-shadow: 0 18px 36px rgba(1, 6, 12, 0.24);
 }
 
 .hero-panel {
-    border: 1px solid rgba(90, 132, 182, 0.28);
-    border-radius: 18px;
-    padding: 1rem;
-    background: rgba(8, 16, 28, 0.62);
-    backdrop-filter: blur(10px);
+    padding: 1.15rem;
 }
 
-.hero-panel h4 {
-    margin: 0 0 0.65rem;
-    font-size: 0.92rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #8fb7de;
+.hero-panel-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
 }
 
 .hero-stat-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.8rem;
+    margin-top: 0.95rem;
 }
 
 .hero-stat {
-    padding: 0.85rem;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(125, 167, 219, 0.16);
+    padding: 0.95rem;
+    border-radius: 18px;
+    border: 1px solid rgba(96, 122, 152, 0.18);
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.hero-stat-label {
+.hero-stat-label,
+.card-meta-label {
     color: var(--ui-muted);
-    font-size: 0.78rem;
-    text-transform: uppercase;
+    font-size: 0.76rem;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .hero-stat-value {
-    margin-top: 0.35rem;
-    font-size: 1.35rem;
-    font-weight: 800;
+    margin-top: 0.4rem;
+    font-family: "Outfit", "IBM Plex Sans", sans-serif;
+    font-size: 1.45rem;
+    font-weight: 700;
 }
 
-.insight-card {
-    border: 1px solid rgba(90, 132, 182, 0.24);
-    border-radius: 18px;
-    padding: 1rem 1.05rem;
-    background: linear-gradient(180deg, rgba(12, 22, 37, 0.88), rgba(10, 18, 31, 0.82));
-    min-height: 100%;
-}
-
-.insight-kicker {
-    color: #7ebeff;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.74rem;
-    font-weight: 800;
-}
-
-.insight-title {
-    margin: 0.35rem 0 0.45rem;
-    font-size: 1.02rem;
-    font-weight: 800;
-}
-
-.insight-copy {
-    margin: 0;
-    color: #bdd1e7;
+.hero-note {
+    color: #b6c6d6;
+    font-size: 0.9rem;
     line-height: 1.55;
 }
 
-.section-callout {
-    padding: 0.9rem 1rem;
-    border-radius: 16px;
-    border: 1px solid rgba(247, 185, 85, 0.3);
-    background: linear-gradient(90deg, rgba(247, 185, 85, 0.1), rgba(255, 255, 255, 0.03));
+.section-label {
+    margin-bottom: 0.55rem;
 }
 
-@media (max-width: 980px) {
-    .hero-grid {
+.insight-card,
+.nav-card,
+.pipeline-card,
+.report-card,
+.dashboard-band {
+    padding: 1rem 1.05rem;
+}
+
+.insight-title,
+.nav-card-title,
+.pipeline-card-title,
+.report-card-title,
+.dashboard-band-title {
+    margin: 0.35rem 0 0.42rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.insight-copy,
+.nav-card-copy,
+.pipeline-card-copy,
+.report-card-copy,
+.dashboard-band-copy {
+    margin: 0;
+    color: #b8c9da;
+    line-height: 1.56;
+}
+
+.nav-card-grid,
+.pipeline-grid,
+.report-grid {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.nav-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 1rem;
+}
+
+.pipeline-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pipeline-status,
+.report-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.9rem;
+    padding: 0.32rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #ecf4fb;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.pipeline-meta,
+.report-meta {
+    margin-top: 0.7rem;
+    color: var(--ui-muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.section-callout {
+    padding: 0.95rem 1.05rem;
+    border-radius: 18px;
+    border: 1px solid rgba(200, 169, 119, 0.22);
+    background: linear-gradient(90deg, rgba(200, 169, 119, 0.1), rgba(255, 255, 255, 0.02));
+    color: #d7e1ea;
+}
+
+.masthead {
+    margin-bottom: 0.95rem;
+}
+
+.masthead-title {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #dbe7f5;
+}
+
+.masthead-copy {
+    margin: 0.22rem 0 0;
+    color: var(--ui-muted);
+    font-size: 0.88rem;
+}
+
+@media (max-width: 1080px) {
+    .hero-grid,
+    .nav-card-grid,
+    .pipeline-grid,
+    .report-grid {
         grid-template-columns: 1fr;
+    }
+
+    .hero-title {
+        max-width: none;
+        font-size: 2.4rem;
     }
 }
 
 div.stTextInput > div > div > input,
 div.stNumberInput > div > div > input,
 div.stTextArea textarea {
-    border-radius: 10px !important;
+    border-radius: 14px !important;
     border: 1px solid var(--ui-border) !important;
-    background-color: rgba(11, 21, 35, 0.92) !important;
+    background-color: rgba(9, 18, 31, 0.92) !important;
     color: var(--ui-ink) !important;
 }
 
@@ -481,13 +746,13 @@ label, p, span, .stMarkdown, [data-testid="stMarkdownContainer"], .stCaption {
 }
 
 div[data-testid="stAlert"] {
-    border-radius: 12px;
+    border-radius: 16px;
 }
 
 div[data-testid="stCodeBlock"] pre {
     border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: rgba(6, 14, 24, 0.95) !important;
+    border-radius: 18px;
+    background: rgba(7, 14, 24, 0.95) !important;
 }
 
 @keyframes click-pop {
@@ -513,7 +778,7 @@ div[data-testid="stCodeBlock"] pre {
 }
 
 [data-testid="stVerticalBlock"] > div {
-    animation: section-fade 0.34s ease-out both;
+    animation: section-fade 0.28s ease-out both;
 }
 </style>
         """,
@@ -567,11 +832,186 @@ def _result_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _safe_child_dirs(path: Path) -> list[Path]:
+    try:
+        return sorted([child for child in path.iterdir() if child.is_dir()])
+    except OSError:
+        return []
+
+
+def _safe_collect_files(path: Path) -> list[Path]:
+    if not path.exists():
+        return []
+
+    files: list[Path] = []
+    stack = [path]
+    while stack:
+        current = stack.pop()
+        try:
+            children = list(current.iterdir())
+        except OSError:
+            continue
+
+        for child in children:
+            try:
+                if child.is_dir():
+                    stack.append(child)
+                elif child.is_file():
+                    files.append(child)
+            except OSError:
+                continue
+    return files
+
+
+def _latest_timestamp(paths: list[Path]) -> float | None:
+    timestamps: list[float] = []
+    for path in paths:
+        try:
+            timestamps.append(path.stat().st_mtime)
+        except OSError:
+            continue
+    return max(timestamps) if timestamps else None
+
+
+def _format_timestamp(timestamp: float | None) -> str:
+    if timestamp is None:
+        return "Awaiting output"
+    return datetime.fromtimestamp(timestamp).strftime("%b %d, %Y %I:%M %p")
+
+
+def _friendly_category_name(category: str) -> str:
+    return CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+
+
+def _read_json_records(path: Path) -> list[dict[str, Any]]:
+    payload = _result_json(path)
+    return payload if isinstance(payload, list) else []
+
+
+def _collect_pipeline_cards() -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    ticker_targets = len(PORTFOLIO_TICKERS)
+
+    for stage in PIPELINE_BLUEPRINT:
+        matching_files: list[Path] = []
+        covered_entities: set[str] = set()
+
+        if stage["scope"] == "portfolio":
+            for category in stage["categories"]:
+                category_files = _safe_collect_files(RESULTS_DIR / "PORTFOLIO" / category)
+                if category_files:
+                    covered_entities.add("PORTFOLIO")
+                    matching_files.extend(category_files)
+            target_total = 1
+            coverage_text = "Portfolio-level workflow"
+        else:
+            for ticker in PORTFOLIO_TICKERS:
+                ticker_has_output = False
+                for category in stage["categories"]:
+                    category_files = _safe_collect_files(RESULTS_DIR / ticker / category)
+                    if category_files:
+                        ticker_has_output = True
+                        matching_files.extend(category_files)
+                if ticker_has_output:
+                    covered_entities.add(ticker)
+            target_total = ticker_targets
+            coverage_text = f"{len(covered_entities)}/{target_total} portfolio companies"
+
+        coverage = len(covered_entities)
+        if coverage == 0:
+            status = "Awaiting run"
+        elif coverage == target_total:
+            status = "Ready"
+        else:
+            status = "Partial"
+
+        cards.append(
+            {
+                "title": stage["title"],
+                "description": stage["description"],
+                "accent": stage["accent"],
+                "status": status,
+                "coverage_text": coverage_text,
+                "artifact_count": len(matching_files),
+                "updated_at": _format_timestamp(_latest_timestamp(matching_files)),
+            }
+        )
+    return cards
+
+
+def _collect_report_cards() -> list[dict[str, Any]]:
+    bonus_root = RESULTS_DIR / "bonus"
+    documents_root = bonus_root / "documents"
+    document_files = _safe_collect_files(documents_root)
+
+    cards: list[dict[str, Any]] = []
+    for report in REPORT_BLUEPRINT:
+        if report["type"] == "document_prefix":
+            matching_files = [path for path in document_files if path.name.startswith(str(report["value"]))]
+            count = len(matching_files)
+            updated_at = _format_timestamp(_latest_timestamp(matching_files))
+            unit_label = "report artifacts"
+        else:
+            records = _read_json_records(bonus_root / str(report["value"]))
+            count = len(records)
+            updated_at = _format_timestamp(_latest_timestamp([bonus_root / str(report["value"])]))
+            unit_label = "tracked records"
+
+        cards.append(
+            {
+                "title": report["title"],
+                "description": report["description"],
+                "accent": report["accent"],
+                "count": count,
+                "unit_label": unit_label,
+                "updated_at": updated_at,
+                "status": "Live" if count else "Awaiting activity",
+            }
+        )
+    return cards
+
+
+def _collect_recent_artifacts(limit: int = 8) -> list[dict[str, str]]:
+    rows: list[tuple[float, dict[str, str]]] = []
+    for path in _safe_collect_files(RESULTS_DIR):
+        suffix = path.suffix.lower()
+        if suffix not in {".json", ".md", ".docx", ".txt"}:
+            continue
+
+        try:
+            relative = path.relative_to(RESULTS_DIR)
+            parts = relative.parts
+            entity = parts[0] if len(parts) > 0 else "results"
+            category = parts[1] if len(parts) > 1 else "misc"
+            timestamp = path.stat().st_mtime
+            updated_at = datetime.fromtimestamp(timestamp).strftime("%b %d, %Y %I:%M %p")
+        except (ValueError, OSError):
+            continue
+
+        rows.append(
+            (
+                timestamp,
+                {
+                "updated_at": updated_at,
+                "entity": entity,
+                "workflow": _friendly_category_name(category),
+                "artifact": path.name,
+                },
+            )
+        )
+
+    rows.sort(key=lambda item: item[0], reverse=True)
+    return [item[1] for item in rows[:limit]]
+
+
 def _collect_result_summary() -> dict[str, Any]:
     tickers = [ticker for ticker in PORTFOLIO_TICKERS if (RESULTS_DIR / ticker).exists()]
     portfolio_dir = RESULTS_DIR / "PORTFOLIO"
-    local_files = list(RESULTS_DIR.rglob("*")) if RESULTS_DIR.exists() else []
-    local_file_count = sum(1 for path in local_files if path.is_file())
+    local_files = _safe_collect_files(RESULTS_DIR)
+    local_file_count = len(local_files)
+    bonus_document_files = _safe_collect_files(RESULTS_DIR / "bonus" / "documents")
+    memory_records = _read_json_records(RESULTS_DIR / "bonus" / "mem0_memory.json")
+    investment_records = _read_json_records(RESULTS_DIR / "bonus" / "investment_tracker.json")
 
     latest_scores: list[dict[str, Any]] = []
     for ticker in tickers:
@@ -601,10 +1041,18 @@ def _collect_result_summary() -> dict[str, Any]:
         "validation_rows": validation_rows,
         "validation_pass_count": passing,
         "validation_total": len(validation_rows),
+        "bonus_document_count": len([path for path in bonus_document_files if path.suffix.lower() in {".md", ".docx"}]),
+        "memory_count": len(memory_records),
+        "investment_count": len(investment_records),
+        "latest_artifact_at": _format_timestamp(_latest_timestamp(local_files)),
     }
 
 
 def _render_hero(summary: dict[str, Any], api_base: str, api_prefix: str, scoring_prefix: str) -> None:
+    pipeline_cards = _collect_pipeline_cards()
+    ready_pipelines = sum(1 for item in pipeline_cards if item["status"] == "Ready")
+    report_cards = _collect_report_cards()
+    live_report_items = sum(int(item["count"]) for item in report_cards)
     top_company = summary["latest_scores"][0] if summary["latest_scores"] else None
     top_label = (
         f"{top_company['ticker']} {top_company['score']:.2f}"
@@ -618,40 +1066,56 @@ def _render_hero(summary: dict[str, Any], api_base: str, api_prefix: str, scorin
     )
     st.markdown(
         f"""
+        <div class="top-ribbon">
+          <div class="top-ribbon-copy">Private equity analytics, diligence review, and report generation in one workspace.</div>
+          <div class="top-ribbon-copy">Portfolio: {" | ".join(PORTFOLIO_TICKERS)} | Latest artifact: {summary["latest_artifact_at"]}</div>
+        </div>
         <section class="hero-shell">
           <div class="hero-grid">
             <div>
-              <div class="hero-chip-row">
-                <span class="hero-chip">Case Study 4 RAG Search</span>
-                <span class="hero-chip">Snowflake + S3 + Chroma</span>
-                <span class="hero-chip">Portfolio: {", ".join(PORTFOLIO_TICKERS)}</span>
-              </div>
-              <h1 class="hero-title">PE OrgAIR Control Center</h1>
+              <div class="hero-kicker">Private Equity Operating Layer</div>
+              <h1 class="hero-title">OrgAIR Portfolio Intelligence</h1>
               <p class="hero-copy">
-                A polished operations console for collection, retrieval, scoring, justification, and artifact review.
-                All existing endpoints remain available below; this layer surfaces portfolio readiness, stored outputs,
-                and the current submission-critical evidence trail first.
+                Evidence-led portfolio analytics for investment teams. Review score movement, inspect source-backed
+                diligence narratives, track value creation programs, and generate committee-ready outputs without
+                dropping into raw tooling unless you actually need it.
               </p>
+              <div class="hero-chip-row">
+                <span class="hero-chip">Portfolio analytics</span>
+                <span class="hero-chip">Evidence traceability</span>
+                <span class="hero-chip">Report automation</span>
+                <span class="hero-chip">Value creation tracking</span>
+              </div>
             </div>
-            <div class="hero-panel">
-              <h4>Run Snapshot</h4>
-              <div class="hero-stat-grid">
-                <div class="hero-stat">
-                  <div class="hero-stat-label">Portfolio Companies</div>
-                  <div class="hero-stat-value">{len(summary["tickers"])}</div>
+            <div class="hero-side">
+              <div class="hero-panel">
+                <p class="hero-panel-title">Live platform snapshot</p>
+                <div class="hero-stat-grid">
+                  <div class="hero-stat">
+                    <div class="hero-stat-label">Tracked Names</div>
+                    <div class="hero-stat-value">{len(summary["tickers"])}</div>
+                  </div>
+                  <div class="hero-stat">
+                    <div class="hero-stat-label">Ready Workflows</div>
+                    <div class="hero-stat-value">{ready_pipelines}/{len(pipeline_cards)}</div>
+                  </div>
+                  <div class="hero-stat">
+                    <div class="hero-stat-label">Strategic Artifacts</div>
+                    <div class="hero-stat-value">{live_report_items}</div>
+                  </div>
+                  <div class="hero-stat">
+                    <div class="hero-stat-label">Top Performer</div>
+                    <div class="hero-stat-value">{top_label}</div>
+                  </div>
                 </div>
-                <div class="hero-stat">
-                  <div class="hero-stat-label">Local Result Files</div>
-                  <div class="hero-stat-value">{summary["local_file_count"]}</div>
-                </div>
-                <div class="hero-stat">
-                  <div class="hero-stat-label">Top OrgAIR Score</div>
-                  <div class="hero-stat-value">{top_label}</div>
-                </div>
-                <div class="hero-stat">
-                  <div class="hero-stat-label">Validation Passes</div>
-                  <div class="hero-stat-value">{pass_rate}</div>
-                </div>
+              </div>
+              <div class="hero-panel">
+                <div class="hero-kicker">Current Validation</div>
+                <div class="hero-panel-title">{pass_rate}</div>
+                <p class="hero-note">
+                  Pipeline artifacts are mirrored locally for review. Portfolio validation, diligence narratives,
+                  scoring outputs, and downloadable reports are surfaced below.
+                </p>
               </div>
             </div>
           </div>
@@ -659,22 +1123,6 @@ def _render_hero(summary: dict[str, Any], api_base: str, api_prefix: str, scorin
         """,
         unsafe_allow_html=True,
     )
-
-    callout_col, conn_col = st.columns([1.5, 1.0])
-    with callout_col:
-        st.markdown(
-            """
-            <div class="section-callout">
-              <strong>Design rule:</strong> visual improvements are additive only. The API console,
-              script runner, scoring dashboard, evidence review, and all submission-critical workflows remain intact below.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with conn_col:
-        st.caption("Active routes")
-        st.write(f"`API` {api_base}{api_prefix}")
-        st.write(f"`Scoring` {api_base}{scoring_prefix}")
 
 
 def _render_overview(summary: dict[str, Any]) -> None:
@@ -685,55 +1133,65 @@ def _render_overview(summary: dict[str, Any]) -> None:
         if score_rows else 0.0
     )
     weakest = score_rows[-1] if score_rows else None
+    report_cards = _collect_report_cards()
+    report_total = sum(int(item["count"]) for item in report_cards)
+    recent_outputs = _collect_recent_artifacts(limit=6)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Portfolio Coverage", f"{len(summary['tickers'])}/5")
+    m1.metric("Portfolio Coverage", f"{len(summary['tickers'])}/{len(PORTFOLIO_TICKERS)}")
     m2.metric("Average OrgAIR", f"{avg_score:.2f}" if score_rows else "n/a")
     m3.metric("Top OrgAIR", f"{top_score:.2f}" if score_rows else "n/a")
-    m4.metric(
-        "Weakest Company",
-        f"{weakest['ticker']} {weakest['score']:.2f}" if isinstance(weakest, dict) else "n/a",
-    )
+    m4.metric("Strategic Artifacts", str(report_total))
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    insight_cols = st.columns(3)
+    with insight_cols[0]:
         st.markdown(
             """
             <div class="insight-card">
-              <div class="insight-kicker">Submission Readiness</div>
-              <div class="insight-title">All core workflows are reachable from one surface</div>
+              <div class="insight-kicker">Executive Lens</div>
+              <div class="insight-title">One portfolio surface, full workflow coverage</div>
               <p class="insight-copy">
-                Health, CS1, CS2, CS3, search, justification, script execution, and raw API access remain available.
-                This tab adds faster operational awareness rather than replacing any requirement-facing controls.
+                The primary experience now centers on score analytics, diligence review, and report generation.
+                Platform diagnostics and raw API controls remain available in the console section when needed.
               </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    with col2:
-        validation = f"{summary['validation_pass_count']} of {summary['validation_total']}" if summary["validation_total"] else "No validation captured"
+    with insight_cols[1]:
+        validation = (
+            f"{summary['validation_pass_count']} of {summary['validation_total']} checks passing"
+            if summary["validation_total"]
+            else "Portfolio validation has not been generated yet"
+        )
         st.markdown(
             f"""
             <div class="insight-card">
-              <div class="insight-kicker">Portfolio Validation</div>
+              <div class="insight-kicker">Validation</div>
               <div class="insight-title">{validation}</div>
               <p class="insight-copy">
-                Latest portfolio validation is mirrored into the local results tree and can be inspected directly in the
-                Results Explorer tab together with scoring outputs and CS4 artifacts.
+                Validation outputs are mirrored into the local results tree and surfaced alongside scoring
+                and diligence artifacts for direct inspection.
               </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    with col3:
-        top_label = ", ".join(item["ticker"] for item in score_rows[:3]) if score_rows else "Awaiting scores"
+    with insight_cols[2]:
+        leader_text = ", ".join(item["ticker"] for item in score_rows[:3]) if score_rows else "Awaiting scores"
+        weakest_text = (
+            f"{weakest['ticker']} {weakest['score']:.2f}"
+            if isinstance(weakest, dict)
+            else "No laggard available"
+        )
         st.markdown(
             f"""
             <div class="insight-card">
-              <div class="insight-kicker">Top Companies</div>
-              <div class="insight-title">{top_label}</div>
+              <div class="insight-kicker">Leaders And Laggards</div>
+              <div class="insight-title">{leader_text}</div>
               <p class="insight-copy">
-                Current leaders are based on the mirrored `latest_org_air_score.json` artifacts in the local portfolio results folder.
+                Current laggard: {weakest_text}. Use the company review surface to inspect dimension profile,
+                supporting evidence, and diligence questions.
               </p>
             </div>
             """,
@@ -741,56 +1199,69 @@ def _render_overview(summary: dict[str, Any]) -> None:
         )
 
     if score_rows:
-        st.divider()
-        st.vega_lite_chart(
-            score_rows,
-            {
-                **_vega_common_config(),
-                "mark": {"type": "line", "point": {"filled": True, "size": 90}, "strokeWidth": 3},
-                "encoding": {
-                    "x": {"field": "ticker", "type": "nominal", "title": "Ticker"},
-                    "y": {"field": "score", "type": "quantitative", "title": "OrgAIR Score"},
-                    "color": {
-                        "field": "score_band",
-                        "type": "nominal",
-                        "scale": {"range": ["#31c6e6", "#2c8bff", "#5c8eff", "#f7b955", "#f08a5d"]},
-                        "title": "Score Band",
-                    },
-                    "tooltip": [
-                        {"field": "ticker", "type": "nominal"},
-                        {"field": "score", "type": "quantitative", "format": ".2f"},
-                        {"field": "score_band", "type": "nominal"},
-                    ],
-                },
-            },
-            use_container_width=True,
-        )
-        st.caption("Portfolio Leaderboard From Local Result Artifacts")
-        st.dataframe(score_rows, use_container_width=True)
+        chart_col, activity_col = st.columns([1.3, 0.9])
+        with chart_col:
+            chart_df = pd.DataFrame(score_rows)
+            fig = px.bar(
+                chart_df.sort_values("score", ascending=True),
+                x="score",
+                y="ticker",
+                orientation="h",
+                color="score",
+                color_continuous_scale=["#0f2438", "#2f7cf6", "#3ecf8e", "#c8a977"],
+                labels={"score": "OrgAIR Score", "ticker": ""},
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=10, b=0),
+                coloraxis_showscale=False,
+                font=dict(color="#eaf1f7"),
+            )
+            fig.update_yaxes(showgrid=False)
+            fig.update_xaxes(gridcolor="rgba(147, 168, 191, 0.18)")
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        with activity_col:
+            st.markdown(
+                f"""
+                <div class="insight-card">
+                  <div class="insight-kicker">Artifact Activity</div>
+                  <div class="insight-title">{summary["local_file_count"]} local files mirrored</div>
+                  <p class="insight-copy">
+                    Latest artifact refresh: {summary["latest_artifact_at"]}. Recent activity is listed below so
+                    you can move directly from high-level overview into the exact output that changed.
+                  </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if recent_outputs:
+                st.dataframe(recent_outputs, use_container_width=True, hide_index=True)
 
 
 def _render_results_explorer() -> None:
-    st.caption("Browse locally mirrored pipeline outputs without leaving the UI.")
-    available_entities = [path.name for path in RESULTS_DIR.iterdir() if path.is_dir()] if RESULTS_DIR.exists() else []
+    st.caption("Inspect mirrored workflow outputs, diligence artifacts, and generated documents from the local results tree.")
+    available_entities = [path.name for path in _safe_child_dirs(RESULTS_DIR)]
     if not available_entities:
         st.info("No local results folder found yet.")
         return
 
     entity = st.selectbox("Entity", sorted(available_entities), key="results_entity")
     entity_dir = RESULTS_DIR / entity
-    available_categories = [path.name for path in entity_dir.iterdir() if path.is_dir()]
+    available_categories = [path.name for path in _safe_child_dirs(entity_dir)]
     if not available_categories:
         st.info("No result categories found for this entity.")
         return
 
     preferred_order = [name for name in RESULT_CATEGORIES if name in available_categories]
     category = st.selectbox(
-        "Category",
+        "Workflow",
         preferred_order + [name for name in available_categories if name not in preferred_order],
         key="results_category",
+        format_func=_friendly_category_name,
     )
     category_dir = entity_dir / category
-    files = sorted([path for path in category_dir.rglob("*") if path.is_file()])
+    files = sorted(_safe_collect_files(category_dir))
     if not files:
         st.info("No files found in this category.")
         return
@@ -803,9 +1274,20 @@ def _render_results_explorer() -> None:
     )
     preview_col, meta_col = st.columns([1.4, 0.8])
     with meta_col:
-        st.write(f"`{selected_path.name}`")
-        st.write(f"Size: `{selected_path.stat().st_size:,}` bytes")
-        st.write(f"Modified: `{datetime.fromtimestamp(selected_path.stat().st_mtime).isoformat(timespec='seconds')}`")
+        st.markdown(
+            f"""
+            <div class="insight-card">
+              <div class="insight-kicker">{_friendly_category_name(category)}</div>
+              <div class="insight-title">{selected_path.name}</div>
+              <p class="insight-copy">
+                Entity: {entity}<br/>
+                Size: {selected_path.stat().st_size:,} bytes<br/>
+                Modified: {datetime.fromtimestamp(selected_path.stat().st_mtime).strftime("%b %d, %Y %I:%M %p")}
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.download_button(
             "Download Artifact",
             data=selected_path.read_bytes(),
@@ -1030,55 +1512,81 @@ def _render_search_source_check(
 
 
 def _render_analytics_hub(summary: dict[str, Any]) -> None:
-    st.caption("Portfolio analytics generated directly from the mirrored submission artifacts.")
+    st.caption("Interactive score analytics sourced directly from mirrored scoring and validation artifacts.")
     validation_payload = _result_json(RESULTS_DIR / "PORTFOLIO" / "validation" / "latest_portfolio_validation.json") or {}
     score_rows = summary["latest_scores"]
+    report_cards = _collect_report_cards()
 
-    if score_rows:
-        analytics_cols = st.columns([1.35, 1.0])
-        with analytics_cols[0]:
-            st.caption("Portfolio Score Spread")
-            st.vega_lite_chart(
-                score_rows,
-                {
-                    **_vega_common_config(),
-                    "mark": {"type": "bar", "cornerRadiusEnd": 10},
-                    "encoding": {
-                        "y": {"field": "ticker", "type": "nominal", "sort": "-x", "title": None},
-                        "x": {"field": "score", "type": "quantitative", "title": "OrgAIR Score"},
-                        "color": {
-                            "field": "score_band",
-                            "type": "nominal",
-                            "scale": {"range": ["#31c6e6", "#2c8bff", "#5c8eff", "#f7b955", "#f08a5d"]},
-                            "title": "Band",
-                        },
-                        "tooltip": [
-                            {"field": "ticker", "type": "nominal"},
-                            {"field": "score", "type": "quantitative", "format": ".2f"},
-                            {"field": "score_band", "type": "nominal"},
-                        ],
-                    },
-                },
-                use_container_width=True,
-            )
-        with analytics_cols[1]:
-            checks = validation_payload.get("checks", {})
-            check_rows = [
-                {
-                    "ticker": ticker,
-                    "score": _to_float(item.get("score")),
-                    "lower_bound": _to_float(item.get("lower_bound")),
-                    "upper_bound": _to_float(item.get("upper_bound")),
-                    "in_range": bool(item.get("in_range")),
-                }
-                for ticker, item in checks.items()
-                if isinstance(item, dict)
-            ]
-            st.caption("Validation Envelope")
-            if check_rows:
-                st.dataframe(check_rows, use_container_width=True)
-            else:
-                st.info("No validation envelope found yet.")
+    if not score_rows:
+        st.info("No local scoring outputs are available yet.")
+        return
+
+    avg_score = sum(item["score"] for item in score_rows) / len(score_rows)
+    score_range = max(item["score"] for item in score_rows) - min(item["score"] for item in score_rows)
+    top_band = score_rows[0]["score_band"] if score_rows else "n/a"
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Average OrgAIR", f"{avg_score:.2f}")
+    metric_cols[1].metric("Score Spread", f"{score_range:.2f}")
+    metric_cols[2].metric(
+        "Validation Passes",
+        f"{summary['validation_pass_count']}/{summary['validation_total']}" if summary["validation_total"] else "n/a",
+    )
+    metric_cols[3].metric("Live Report Modules", sum(1 for item in report_cards if int(item["count"]) > 0))
+
+    analytics_cols = st.columns([1.2, 0.8])
+    with analytics_cols[0]:
+        score_df = pd.DataFrame(score_rows)
+        score_fig = px.bar(
+            score_df.sort_values("score", ascending=True),
+            x="score",
+            y="ticker",
+            orientation="h",
+            color="score_band",
+            color_discrete_sequence=["#2f7cf6", "#28a59c", "#6e86ff", "#c8a977", "#f08a5d"],
+            labels={"score": "OrgAIR Score", "ticker": ""},
+            category_orders={"score_band": list(dict.fromkeys(score_df["score_band"].tolist()))},
+        )
+        score_fig.update_layout(
+            title="Portfolio Score Spread",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#edf3f9"),
+            legend_title_text="Band",
+            margin=dict(l=0, r=0, t=48, b=0),
+        )
+        score_fig.update_xaxes(gridcolor="rgba(147, 168, 191, 0.16)")
+        score_fig.update_yaxes(showgrid=False)
+        st.plotly_chart(score_fig, use_container_width=True, config={"displayModeBar": False})
+    with analytics_cols[1]:
+        checks = validation_payload.get("checks", {})
+        check_rows = [
+            {
+                "ticker": ticker,
+                "score": _to_float(item.get("score")),
+                "lower_bound": _to_float(item.get("lower_bound")),
+                "upper_bound": _to_float(item.get("upper_bound")),
+                "in_range": bool(item.get("in_range")),
+            }
+            for ticker, item in checks.items()
+            if isinstance(item, dict)
+        ]
+        st.markdown(
+            f"""
+            <div class="insight-card">
+              <div class="insight-kicker">Validation Envelope</div>
+              <div class="insight-title">Top score band: {top_band}</div>
+              <p class="insight-copy">
+                Portfolio validation checks compare current scores against the expected envelope and flag any outliers.
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if check_rows:
+            st.dataframe(check_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No validation envelope found yet.")
 
     dimension_rows: list[dict[str, Any]] = []
     for ticker in summary["tickers"]:
@@ -1096,36 +1604,65 @@ def _render_analytics_hub(summary: dict[str, Any]) -> None:
                 )
 
     if dimension_rows:
-        st.divider()
-        st.caption("Dimension Heatmap")
-        st.vega_lite_chart(
-            dimension_rows,
-            {
-                **_vega_common_config(),
-                "mark": "rect",
-                "encoding": {
-                    "x": {"field": "dimension", "type": "nominal", "title": None},
-                    "y": {"field": "ticker", "type": "nominal", "title": None},
-                    "color": {
-                        "field": "score",
-                        "type": "quantitative",
-                        "scale": {"range": ["#0d2034", "#1d5fa8", "#31c6e6", "#f7b955"]},
-                        "title": "Score",
-                    },
-                    "tooltip": [
-                        {"field": "ticker", "type": "nominal"},
-                        {"field": "dimension", "type": "nominal"},
-                        {"field": "score", "type": "quantitative", "format": ".2f"},
-                        {"field": "confidence", "type": "quantitative", "format": ".2f"},
+        dimension_df = pd.DataFrame(dimension_rows)
+        lower_cols = st.columns([1.15, 0.85])
+        with lower_cols[0]:
+            heatmap_df = (
+                dimension_df.pivot(index="ticker", columns="dimension", values="score")
+                .fillna(0.0)
+                .sort_index()
+            )
+            heatmap = go.Figure(
+                data=go.Heatmap(
+                    z=heatmap_df.values,
+                    x=list(heatmap_df.columns),
+                    y=list(heatmap_df.index),
+                    colorscale=[
+                        [0.0, "#0d1c2b"],
+                        [0.35, "#24528b"],
+                        [0.65, "#2aa6a0"],
+                        [1.0, "#c8a977"],
                     ],
+                    hovertemplate="Company=%{y}<br>Dimension=%{x}<br>Score=%{z:.2f}<extra></extra>",
+                )
+            )
+            heatmap.update_layout(
+                title="Dimension Heatmap",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#edf3f9"),
+                margin=dict(l=0, r=0, t=48, b=0),
+            )
+            st.plotly_chart(heatmap, use_container_width=True, config={"displayModeBar": False})
+        with lower_cols[1]:
+            bubble = px.scatter(
+                dimension_df,
+                x="confidence",
+                y="score",
+                size="evidence_count",
+                color="ticker",
+                hover_name="dimension",
+                labels={
+                    "confidence": "Confidence",
+                    "score": "Dimension Score",
+                    "evidence_count": "Evidence Count",
                 },
-            },
-            use_container_width=True,
-        )
+            )
+            bubble.update_layout(
+                title="Confidence vs Dimension Score",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#edf3f9"),
+                margin=dict(l=0, r=0, t=48, b=0),
+                legend_title_text="Ticker",
+            )
+            bubble.update_xaxes(gridcolor="rgba(147, 168, 191, 0.16)")
+            bubble.update_yaxes(gridcolor="rgba(147, 168, 191, 0.16)")
+            st.plotly_chart(bubble, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_analysis_studio(summary: dict[str, Any]) -> None:
-    st.caption("Company-level narrative analysis sourced from the generated CS4 and scoring artifacts.")
+    st.caption("Company-level narrative analysis sourced from mirrored diligence and scoring artifacts.")
     if not summary["tickers"]:
         st.info("No portfolio result folders found yet.")
         return
@@ -1465,14 +2002,384 @@ def _render_company_breakdown(record: dict[str, Any], company_names: dict[str, s
     )
 
 
+def _render_bonus_deliverables() -> None:
+    dashboard_view.render_cs5_dashboard(
+        embedded=True,
+        key_prefix="legacy_bonus_dashboard",
+    )
+
+
+def _render_experience_home(summary: dict[str, Any]) -> None:
+    latest_scores = summary.get("latest_scores", [])
+    latest_leaders = latest_scores[:3]
+    leader_text = " • ".join(
+        f"{item['ticker']} {item['score']:.1f}" for item in latest_leaders if isinstance(item, dict)
+    ) or "Awaiting current scoring outputs"
+    validation_text = (
+        f"{summary['validation_pass_count']} of {summary['validation_total']} portfolio checks passing"
+        if summary.get("validation_total")
+        else "Portfolio validation artifacts have not been generated yet"
+    )
+
+    st.markdown(
+        f"""
+        <div class="nav-card-grid">
+          <div class="nav-card">
+            <div class="insight-kicker">Start Here</div>
+            <div class="nav-card-title">Portfolio Intelligence</div>
+            <p class="nav-card-copy">
+              Open the integrated CS5 dashboard, portfolio analytics, and company narrative review without touching raw endpoints.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">CS5 dashboard</span>
+              <span class="micro-pill">Analytics</span>
+              <span class="micro-pill">Bonus deliverables</span>
+            </div>
+          </div>
+          <div class="nav-card">
+            <div class="insight-kicker">Workbench</div>
+            <div class="nav-card-title">Evidence And Diligence Flow</div>
+            <p class="nav-card-copy">
+              Inspect source retrieval, trace justifications, and review generated artifacts before moving into operator tooling.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">Source check</span>
+              <span class="micro-pill">Artifact explorer</span>
+              <span class="micro-pill">Submission review</span>
+            </div>
+          </div>
+          <div class="nav-card">
+            <div class="insight-kicker">Operations</div>
+            <div class="nav-card-title">Advanced Controls Are Still Here</div>
+            <p class="nav-card-copy">
+              Collection, CRUD APIs, scoring runs, script execution, and raw HTTP access now live under one advanced workspace.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">API console</span>
+              <span class="micro-pill">Script runner</span>
+              <span class="micro-pill">Health checks</span>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    flow_col, status_col = st.columns([1.15, 0.85])
+    with flow_col:
+        st.markdown(
+            """
+            <div class="section-callout">
+              <strong>Recommended journey:</strong> 1) review executive health and current outputs, 2) open Portfolio Intelligence for CS5 analysis and bonus deliverables, 3) use Diligence Workbench for evidence tracing, 4) go to Advanced Ops only when you need to run or debug the platform.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with status_col:
+        st.markdown(
+            f"""
+            <div class="insight-card">
+              <div class="insight-kicker">Latest Leaders</div>
+              <div class="insight-title">{leader_text}</div>
+              <p class="insight-copy">{validation_text}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    home_tabs = st.tabs(["Executive Snapshot", "Recent Output Signals"])
+    with home_tabs[0]:
+        _render_overview(summary)
+    with home_tabs[1]:
+        st.caption("Recent portfolio files and mirrored scoring outputs available from the local results tree.")
+        artifact_cols = st.columns([1.0, 1.0])
+        with artifact_cols[0]:
+            if latest_scores:
+                st.dataframe(latest_scores[:5], use_container_width=True)
+            else:
+                st.info("No current OrgAIR result files found yet.")
+        with artifact_cols[1]:
+            st.metric("Local Result Files", f"{summary.get('local_file_count', 0):,}")
+            st.metric("Tracked Portfolio Companies", f"{len(summary.get('tickers', []))}")
+            st.caption("Use Results & Evidence to inspect the underlying artifacts and source documents.")
+
+
+def _render_experience_hub(summary: dict[str, Any]) -> None:
+    latest_scores = summary.get("latest_scores", [])
+    latest_leaders = latest_scores[:3]
+    leader_text = " | ".join(
+        f"{item['ticker']} {item['score']:.1f}" for item in latest_leaders if isinstance(item, dict)
+    ) or "Awaiting current scoring outputs"
+    validation_text = (
+        f"{summary['validation_pass_count']} of {summary['validation_total']} validation checks passing"
+        if summary.get("validation_total")
+        else "Portfolio validation has not been generated yet"
+    )
+    pipeline_cards = _collect_pipeline_cards()
+    report_cards = _collect_report_cards()
+    recent_artifacts = _collect_recent_artifacts(limit=10)
+
+    pipeline_markup = "".join(
+        f"""
+        <div class="pipeline-card" style="border-top: 1px solid {item['accent']}">
+          <div class="insight-kicker">Workflow</div>
+          <div class="pipeline-card-title">{item['title']}</div>
+          <p class="pipeline-card-copy">{item['description']}</p>
+          <div class="pipeline-status" style="box-shadow: inset 0 0 0 1px {item['accent']}33;">{item['status']}</div>
+          <div class="pipeline-meta">{item['coverage_text']}<br/>Artifacts: {item['artifact_count']}<br/>Updated: {item['updated_at']}</div>
+        </div>
+        """
+        for item in pipeline_cards
+    )
+    report_markup = "".join(
+        f"""
+        <div class="report-card" style="border-top: 1px solid {item['accent']}">
+          <div class="insight-kicker">Report And Memory Layer</div>
+          <div class="report-card-title">{item['title']}</div>
+          <p class="report-card-copy">{item['description']}</p>
+          <div class="report-status" style="box-shadow: inset 0 0 0 1px {item['accent']}33;">{item['status']}</div>
+          <div class="report-meta">{item['count']} {item['unit_label']}<br/>Updated: {item['updated_at']}</div>
+        </div>
+        """
+        for item in report_cards
+    )
+
+    st.markdown(
+        """
+        <div class="nav-card-grid">
+          <div class="nav-card">
+            <div class="insight-kicker">Start Here</div>
+            <div class="nav-card-title">Portfolio Analytics</div>
+            <p class="nav-card-copy">
+              Open the executive dashboard, score analytics, and company review surface without touching raw endpoints.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">Executive dashboard</span>
+              <span class="micro-pill">Score analytics</span>
+              <span class="micro-pill">Strategic outputs</span>
+            </div>
+          </div>
+          <div class="nav-card">
+            <div class="insight-kicker">Workbench</div>
+            <div class="nav-card-title">Evidence And Diligence Review</div>
+            <p class="nav-card-copy">
+              Inspect source retrieval, trace justifications, and review generated diligence artifacts before moving into platform controls.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">Source check</span>
+              <span class="micro-pill">Artifact explorer</span>
+              <span class="micro-pill">Narrative review</span>
+            </div>
+          </div>
+          <div class="nav-card">
+            <div class="insight-kicker">Platform Console</div>
+            <div class="nav-card-title">Direct Controls Stay Available</div>
+            <p class="nav-card-copy">
+              Collection jobs, CRUD APIs, scoring runs, script execution, and raw HTTP access now live in one consolidated console.
+            </p>
+            <div class="micro-pill-row">
+              <span class="micro-pill">API console</span>
+              <span class="micro-pill">Script runner</span>
+              <span class="micro-pill">Diagnostics</span>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    flow_col, status_col = st.columns([1.15, 0.85])
+    with flow_col:
+        st.markdown(
+            """
+            <div class="section-callout">
+              <strong>Recommended journey:</strong> 1) review executive metrics and recent output movement, 2) open portfolio analytics for score and company review, 3) inspect evidence and diligence artifacts, 4) use the platform console only when you need direct execution or diagnostics.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with status_col:
+        st.markdown(
+            f"""
+            <div class="insight-card">
+              <div class="insight-kicker">Latest Leaders</div>
+              <div class="insight-title">{leader_text}</div>
+              <p class="insight-copy">{validation_text}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="section-label">Pipeline Coverage</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="pipeline-grid">{pipeline_markup}</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-label" style="margin-top: 1rem;">Reports And Outputs</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="report-grid">{report_markup}</div>', unsafe_allow_html=True)
+
+    home_tabs = st.tabs(["Portfolio Snapshot", "Workflow Coverage", "Recent Deliverables"])
+    with home_tabs[0]:
+        _render_overview(summary)
+    with home_tabs[1]:
+        st.dataframe(
+            [
+                {
+                    "workflow": item["title"],
+                    "status": item["status"],
+                    "coverage": item["coverage_text"],
+                    "artifacts": item["artifact_count"],
+                    "updated_at": item["updated_at"],
+                }
+                for item in pipeline_cards
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    with home_tabs[2]:
+        st.dataframe(recent_artifacts, use_container_width=True, hide_index=True)
+
+
+def _render_section_header(kicker: str, title: str, copy: str) -> None:
+    st.markdown(
+        f"""
+        <div class="dashboard-band" style="margin: 1.1rem 0 0.85rem;">
+          <div class="insight-kicker">{kicker}</div>
+          <div class="dashboard-band-title">{title}</div>
+          <p class="dashboard-band-copy">{copy}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _workspace_roots() -> dict[str, Path]:
+    return {
+        "Generated Results": RESULTS_DIR,
+        "Generated Reports": RESULTS_DIR / "bonus" / "documents",
+        "Automation Scripts": SCRIPTS_DIR,
+        "Dashboard Module": ROOT_DIR / "app" / "dashboard",
+        "Streamlit Shell": STREAMLIT_DIR,
+        "Architecture Docs": ROOT_DIR / "docs",
+    }
+
+
+def _language_for_suffix(path: Path) -> str | None:
+    mapping = {
+        ".py": "python",
+        ".json": "json",
+        ".md": "markdown",
+        ".txt": "text",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".toml": "toml",
+        ".ps1": "powershell",
+        ".sql": "sql",
+        ".svg": "xml",
+    }
+    return mapping.get(path.suffix.lower())
+
+
+def _render_file_preview(path: Path) -> None:
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        payload = _result_json(path)
+        if payload is not None:
+            _show_payload(payload)
+            return
+
+    if suffix in {".py", ".md", ".txt", ".yml", ".yaml", ".toml", ".ps1", ".sql", ".svg"}:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        st.code(text[:20000] if len(text) > 20000 else text, language=_language_for_suffix(path))
+        return
+
+    st.info("Preview is not available for this file type. Use the download action to inspect it locally.")
+
+
+def _render_workspace_browser() -> None:
+    st.caption("Browse the files and folders that power the dashboard directly inside Streamlit.")
+    roots = _workspace_roots()
+    root_label = st.selectbox("Workspace Root", list(roots.keys()), key="workspace_browser_root")
+    root_path = roots[root_label]
+
+    if not root_path.exists():
+        st.info("This workspace root does not exist yet.")
+        return
+
+    files = sorted(_safe_collect_files(root_path))
+    if not files:
+        st.info("No files found in this workspace root.")
+        return
+
+    folders = sorted(
+        {
+            "."
+            if file_path.parent == root_path
+            else str(file_path.parent.relative_to(root_path))
+            for file_path in files
+        }
+    )
+    selected_folder = st.selectbox("Folder", ["All"] + folders, key="workspace_browser_folder")
+    filtered_files = [
+        file_path
+        for file_path in files
+        if selected_folder == "All"
+        or (file_path.parent == root_path and selected_folder == ".")
+        or str(file_path.parent.relative_to(root_path)) == selected_folder
+    ]
+
+    if not filtered_files:
+        st.info("No files found in this folder.")
+        return
+
+    selected_file = st.selectbox(
+        "File",
+        filtered_files,
+        key="workspace_browser_file",
+        format_func=lambda path: str(path.relative_to(root_path)),
+    )
+
+    preview_col, meta_col = st.columns([1.35, 0.8])
+    with meta_col:
+        st.markdown(
+            f"""
+            <div class="insight-card">
+              <div class="insight-kicker">{root_label}</div>
+              <div class="insight-title">{selected_file.name}</div>
+              <p class="insight-copy">
+                Folder: {selected_file.parent.relative_to(root_path) if selected_file.parent != root_path else '.'}<br/>
+                Size: {selected_file.stat().st_size:,} bytes<br/>
+                Modified: {datetime.fromtimestamp(selected_file.stat().st_mtime).strftime("%b %d, %Y %I:%M %p")}
+              </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.download_button(
+            "Download File",
+            data=selected_file.read_bytes(),
+            file_name=selected_file.name,
+            mime="application/octet-stream",
+            use_container_width=True,
+            key=f"workspace_download_{root_label}_{selected_file.name}",
+        )
+    with preview_col:
+        _render_file_preview(selected_file)
+
+
 # ============================================================
 # UI setup
 # ============================================================
 
-st.set_page_config(page_title="PE OrgAIR Platform", layout="wide")
+st.set_page_config(page_title="OrgAIR Portfolio Intelligence", layout="wide")
 _inject_ui_theme()
-st.title("PE OrgAIR Platform")
-st.caption("Executive-grade portfolio dashboard plus full API, scoring, evidence, and automation console.")
+st.markdown(
+    """
+    <div class="masthead">
+      <p class="masthead-title">OrgAIR Portfolio Intelligence</p>
+      <p class="masthead-copy">Executive analytics, diligence review, and report generation for the portfolio.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 if "connection_mode" not in st.session_state:
     st.session_state["connection_mode"] = "Cloud Run"
@@ -1480,129 +2387,123 @@ if "api_base_value" not in st.session_state:
     st.session_state["api_base_value"] = DEFAULT_CLOUD_RUN_API_BASE
 
 with st.sidebar:
-    st.header("Connection")
-    connection_mode = st.radio(
-        "Environment",
-        ["Cloud Run", "Local", "Custom"],
-        key="connection_mode",
-        horizontal=False,
-    )
+    st.header("Workspace")
+    st.caption("Executive analytics first. Platform controls remain available in the console section below.")
+    st.info("Primary journey: Unified Workspace -> Portfolio Command -> Review And Files -> Platform Console")
 
-    if connection_mode == "Cloud Run":
-        st.session_state["api_base_value"] = DEFAULT_CLOUD_RUN_API_BASE
-        st.success("Cloud Run API preset active")
-    elif connection_mode == "Local":
-        st.session_state["api_base_value"] = DEFAULT_API_BASE
-        st.info("Local API preset active")
-
-    if connection_mode == "Custom":
-        api_base = st.text_input("API Base URL", value=st.session_state.get("api_base_value", DEFAULT_API_BASE))
-        st.session_state["api_base_value"] = api_base
-    else:
-        api_base = st.text_input(
-            "API Base URL",
-            value=st.session_state.get("api_base_value", DEFAULT_API_BASE),
-            disabled=True,
+    with st.expander("Connection", expanded=False):
+        connection_mode = st.radio(
+            "Environment",
+            ["Cloud Run", "Local", "Custom"],
+            key="connection_mode",
+            horizontal=False,
         )
 
-    api_prefix = st.text_input("API Prefix", value=DEFAULT_API_PREFIX)
-    scoring_prefix = st.text_input("Scoring Prefix", value=DEFAULT_SCORING_PREFIX)
-    timeout = st.number_input("HTTP Timeout (seconds)", min_value=1, max_value=300, value=20)
-    verify_tls = st.checkbox("Verify TLS certificates", value=True)
+        if connection_mode == "Cloud Run":
+            st.session_state["api_base_value"] = DEFAULT_CLOUD_RUN_API_BASE
+            st.success("Cloud Run API preset active")
+        elif connection_mode == "Local":
+            st.session_state["api_base_value"] = DEFAULT_API_BASE
+            st.info("Local API preset active")
 
-    st.divider()
-    st.header("Optional Auth")
-    bearer_token = st.text_input("Bearer Token", value="", type="password")
-    extra_headers_text = st.text_area("Extra Headers JSON", value="{}", height=100)
+        if connection_mode == "Custom":
+            api_base = st.text_input("API Base URL", value=st.session_state.get("api_base_value", DEFAULT_API_BASE))
+            st.session_state["api_base_value"] = api_base
+        else:
+            api_base = st.text_input(
+                "API Base URL",
+                value=st.session_state.get("api_base_value", DEFAULT_API_BASE),
+                disabled=True,
+            )
+
+        api_prefix = st.text_input("API Prefix", value=DEFAULT_API_PREFIX)
+        scoring_prefix = st.text_input("Scoring Prefix", value=DEFAULT_SCORING_PREFIX)
+        timeout = st.number_input("HTTP Timeout (seconds)", min_value=1, max_value=300, value=20)
+        verify_tls = st.checkbox("Verify TLS certificates", value=True)
+
+    with st.expander("Auth And Headers", expanded=False):
+        bearer_token = st.text_input("Bearer Token", value="", type="password")
+        extra_headers_text = st.text_area("Extra Headers JSON", value="{}", height=100)
 
     headers, headers_error = _build_headers(bearer_token, extra_headers_text)
     if headers_error:
         st.error(headers_error)
 
-    st.divider()
-    st.caption("Routing notes")
-    st.write("- Health endpoints do not use API prefix")
-    st.write("- Scoring routes use the dedicated scoring prefix")
-    st.write(f"- Cloud Run preset: `{DEFAULT_CLOUD_RUN_API_BASE}`")
-    st.write(f"- Local results root: `{RESULTS_DIR}`")
-    st.write(f"- Default portfolio: `{', '.join(PORTFOLIO_TICKERS)}`")
+    with st.expander("Platform Details", expanded=False):
+        st.write("- Health endpoints do not use the API prefix")
+        st.write("- Scoring routes use the dedicated scoring prefix")
+        st.write(f"- Cloud Run preset: `{DEFAULT_CLOUD_RUN_API_BASE}`")
+        st.write(f"- Local results root: `{RESULTS_DIR}`")
+        st.write(f"- Default portfolio: `{', '.join(PORTFOLIO_TICKERS)}`")
 
 result_summary = _collect_result_summary()
 _render_hero(result_summary, api_base, api_prefix, scoring_prefix)
-st.caption("Navigation is in the horizontal tab row below. Scroll sideways if your screen does not show all tabs.")
 
 
-# ============================================================
-# Tabs
-# ============================================================
+_render_section_header(
+    "Unified Workspace",
+    "One operating surface for portfolio intelligence",
+    "The dashboard, diligence review, reports, files, and execution tools now live inside one continuous Streamlit workspace.",
+)
+_render_experience_hub(result_summary)
 
-main_tabs = st.tabs(
+_render_section_header(
+    "Portfolio Command",
+    "Executive dashboard, analytics, and company drilldown",
+    "Core portfolio review stays together here: live company metrics, score analytics, and narrative diligence analysis.",
+)
+portfolio_tabs = st.tabs(["Executive Dashboard", "Score Analytics", "Company Review"])
+
+with portfolio_tabs[0]:
+    dashboard_view.render_cs5_dashboard(
+        embedded=True,
+        key_prefix="platform_cs5_dashboard",
+    )
+
+with portfolio_tabs[1]:
+    _render_analytics_hub(result_summary)
+
+with portfolio_tabs[2]:
+    _render_analysis_studio(result_summary)
+
+_render_section_header(
+    "Review And Files",
+    "Evidence review, mirrored outputs, and repository browser",
+    "Search sources, inspect generated artifacts, and browse dashboard and workflow files without leaving the app.",
+)
+review_tabs = st.tabs(["Source Review", "Results Library", "Workspace Browser"])
+
+with review_tabs[0]:
+    _render_search_source_check(result_summary, api_base, api_prefix, int(timeout), headers, verify_tls)
+
+with review_tabs[1]:
+    _render_results_explorer()
+
+with review_tabs[2]:
+    _render_workspace_browser()
+
+_render_section_header(
+    "Platform Console",
+    "Direct execution, diagnostics, and API control",
+    "Operational tooling remains available below for collection jobs, scoring runs, scripts, and direct endpoint access.",
+)
+ops_tabs = st.tabs(
     [
-        "Overview",
-        "Results Explorer",
-        "Analysis Studio",
-        "Analytics",
-        "Search & Source Check",
         "Health",
         "Companies",
         "Assessments",
-        "Collection",
-        "Documents & Chunks",
+        "Collection Jobs",
+        "Documents",
         "Signals",
-        "Signal Summaries",
+        "Signal Intelligence",
         "Evidence",
         "Scoring",
-        "Scripts",
-        "Raw API",
+        "Script Runner",
+        "API Console",
     ]
 )
 
-
-# ============================================================
-# Overview
-# ============================================================
-
-with main_tabs[0]:
-    _render_overview(result_summary)
-
-
-# ============================================================
-# Results Explorer
-# ============================================================
-
-with main_tabs[1]:
-    _render_results_explorer()
-
-
-# ============================================================
-# Analysis Studio
-# ============================================================
-
-with main_tabs[2]:
-    _render_analysis_studio(result_summary)
-
-
-# ============================================================
-# Analytics
-# ============================================================
-
-with main_tabs[3]:
-    _render_analytics_hub(result_summary)
-
-
-# ============================================================
-# Search & Source Check
-# ============================================================
-
-with main_tabs[4]:
-    _render_search_source_check(result_summary, api_base, api_prefix, int(timeout), headers, verify_tls)
-
-
-# ============================================================
-# Health
-# ============================================================
-
-with main_tabs[5]:
+with ops_tabs[0]:
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1631,7 +2532,7 @@ with main_tabs[5]:
 # Companies
 # ============================================================
 
-with main_tabs[6]:
+with ops_tabs[1]:
     tabs = st.tabs(["List", "Industries", "Get", "Create", "Update", "Delete"])
 
     with tabs[0]:
@@ -1768,7 +2669,7 @@ with main_tabs[6]:
 # Assessments
 # ============================================================
 
-with main_tabs[7]:
+with ops_tabs[2]:
     tabs = st.tabs(["List", "Get", "Create", "Update Status", "List Scores", "Upsert Score"])
 
     with tabs[0]:
@@ -1933,7 +2834,7 @@ with main_tabs[7]:
 # Collection
 # ============================================================
 
-with main_tabs[8]:
+with ops_tabs[3]:
     tabs = st.tabs(["Collect Evidence", "Collect Signals", "Task Status"])
 
     with tabs[0]:
@@ -2011,7 +2912,7 @@ with main_tabs[8]:
 # Documents & Chunks
 # ============================================================
 
-with main_tabs[9]:
+with ops_tabs[4]:
     tabs = st.tabs(["List Documents", "Get Document", "List Chunks", "Get Chunk"])
 
     with tabs[0]:
@@ -2093,7 +2994,7 @@ with main_tabs[9]:
 # Signals
 # ============================================================
 
-with main_tabs[10]:
+with ops_tabs[5]:
     tabs = st.tabs(["List", "Get"])
 
     with tabs[0]:
@@ -2137,7 +3038,7 @@ with main_tabs[10]:
 # Signal Summaries
 # ============================================================
 
-with main_tabs[11]:
+with ops_tabs[6]:
     tabs = st.tabs(["List", "Compute"])
 
     with tabs[0]:
@@ -2184,7 +3085,7 @@ with main_tabs[11]:
 # Evidence
 # ============================================================
 
-with main_tabs[12]:
+with ops_tabs[7]:
     tabs = st.tabs(["Stats", "List Documents", "Get Document", "Get Document Chunks"])
 
     with tabs[0]:
@@ -2262,7 +3163,7 @@ with main_tabs[12]:
 # Scoring
 # ============================================================
 
-with main_tabs[13]:
+with ops_tabs[8]:
     tabs = st.tabs(["Compute", "Latest by Company", "Leaderboard", "Visuals"])
 
     with tabs[0]:
@@ -2408,7 +3309,7 @@ with main_tabs[13]:
 # Scripts
 # ============================================================
 
-with main_tabs[14]:
+with ops_tabs[9]:
     scripts = _list_repo_scripts()
 
     st.caption("Run repository scripts from the Streamlit UI (working directory: repo root).")
@@ -2476,7 +3377,7 @@ with main_tabs[14]:
 # Raw API
 # ============================================================
 
-with main_tabs[15]:
+with ops_tabs[10]:
     st.caption("Manual API console for any path/method.")
 
     method = st.selectbox("Method", ["GET", "POST", "PUT", "PATCH", "DELETE"], key="raw_method")

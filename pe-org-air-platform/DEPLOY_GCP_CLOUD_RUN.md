@@ -39,7 +39,7 @@ $REGION="us-central1"
 $REPO="orgair"
 $SERVICE="orgair-api"
 $IMAGE="$REGION-docker.pkg.dev/$PROJECT/$REPO/$SERVICE:latest"
-$CONFIG=".\\pe-org-air-platform\\cloudbuild.temp.yaml"
+$CONFIG=".\\cloudbuild.temp.yaml"
 
 @"
 steps:
@@ -55,7 +55,7 @@ gcloud.cmd artifacts repositories describe $REPO --location $REGION 2>$null
 if ($LASTEXITCODE -ne 0) {
   gcloud.cmd artifacts repositories create $REPO --repository-format=docker --location=$REGION --description="Container images for PE OrgAIR API"
 }
-gcloud.cmd builds submit .\pe-org-air-platform --config $CONFIG
+gcloud.cmd builds submit . --config $CONFIG
 gcloud.cmd run deploy $SERVICE --image $IMAGE --region $REGION --platform managed --port 8000 --allow-unauthenticated
 Remove-Item $CONFIG -Force
 ```

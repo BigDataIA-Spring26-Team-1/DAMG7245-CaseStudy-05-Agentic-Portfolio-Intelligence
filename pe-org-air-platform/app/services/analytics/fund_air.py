@@ -42,9 +42,20 @@ class FundAIRCalculator:
         if not companies:
             raise ValueError("Cannot calculate Fund-AI-R for empty portfolio")
 
-        total_ev = sum(enterprise_values.get(c.company_id, 100.0) for c in companies)
+        missing_enterprise_values = [
+            c.company_id
+            for c in companies
+            if c.company_id not in enterprise_values
+        ]
+        if missing_enterprise_values:
+            raise ValueError(
+                "Missing enterprise values for portfolio companies: "
+                + ", ".join(sorted(missing_enterprise_values))
+            )
+
+        total_ev = sum(float(enterprise_values[c.company_id]) for c in companies)
         weighted_sum = sum(
-            enterprise_values.get(c.company_id, 100.0) * c.org_air for c in companies
+            float(enterprise_values[c.company_id]) * c.org_air for c in companies
         )
         fund_air = weighted_sum / total_ev if total_ev > 0 else 0.0
 
@@ -54,7 +65,7 @@ class FundAIRCalculator:
 
         sector_ev: Dict[str, float] = {}
         for c in companies:
-            ev = enterprise_values.get(c.company_id, 100.0)
+            ev = float(enterprise_values[c.company_id])
             sector_ev[c.sector] = sector_ev.get(c.sector, 0.0) + ev
 
         hhi = sum((ev / total_ev) ** 2 for ev in sector_ev.values()) if total_ev > 0 else 0.0
