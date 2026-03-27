@@ -6,6 +6,72 @@ import types
 
 
 def _install_mcp_test_stubs(monkeypatch) -> None:
+    structlog_module = types.ModuleType("structlog")
+
+    class _Logger:
+        def info(self, *args, **kwargs):
+            return None
+
+        def warning(self, *args, **kwargs):
+            return None
+
+    structlog_module.get_logger = lambda: _Logger()
+    monkeypatch.setitem(sys.modules, "structlog", structlog_module)
+
+    mcp_module = types.ModuleType("mcp")
+    mcp_server_module = types.ModuleType("mcp.server")
+    mcp_fastmcp_module = types.ModuleType("mcp.server.fastmcp")
+
+    class FastMCP:
+        def __init__(
+            self,
+            name,
+            instructions=None,
+            host=None,
+            port=None,
+            streamable_http_path=None,
+            json_response=None,
+        ):
+            self.name = name
+            self.instructions = instructions
+            self.settings = types.SimpleNamespace(
+                host=host,
+                port=port,
+                streamable_http_path=streamable_http_path,
+                json_response=json_response,
+            )
+
+        def tool(self, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def resource(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def prompt(self, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def run(self, *, transport):
+            return None
+
+        def streamable_http_app(self):
+            return types.SimpleNamespace(
+                routes=[types.SimpleNamespace(path=self.settings.streamable_http_path)]
+            )
+
+    mcp_fastmcp_module.FastMCP = FastMCP
+    monkeypatch.setitem(sys.modules, "mcp", mcp_module)
+    monkeypatch.setitem(sys.modules, "mcp.server", mcp_server_module)
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", mcp_fastmcp_module)
+
     tools_module = types.ModuleType("app.mcp.tools")
 
     async def _tool(arguments):
