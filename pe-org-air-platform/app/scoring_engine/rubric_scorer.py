@@ -270,7 +270,7 @@ RUBRIC_FALLBACK_THRESHOLDS: Dict[str, Dict[str, float]] = {
 def _fallback_threshold_score(feature_dim: str, f: DimensionFeature) -> tuple[float, str]:
     t = RUBRIC_FALLBACK_THRESHOLDS.get(feature_dim)
     if not t:
-        return 50.0, "fallback default=50"
+        raise ValueError(f"No fallback thresholds configured for dimension: {feature_dim}")
  
     s = float(f.weighted_signal)
     if s < t["low"]:
