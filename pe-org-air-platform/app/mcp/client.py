@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 import httpx
-import structlog
+from app.logging_utils import get_logger
 from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def _parse_tool_result(result: Any) -> str:

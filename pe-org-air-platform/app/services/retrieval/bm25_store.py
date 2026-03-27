@@ -4,7 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from rank_bm25 import BM25Okapi
+try:
+    from rank_bm25 import BM25Okapi
+except ImportError:
+    BM25Okapi = None
 
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.evidence_client import EvidenceClient
@@ -14,6 +17,21 @@ _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 
 def tokenize(text: str) -> List[str]:
     return _WORD_RE.findall((text or "").lower())
+
+
+def _fallback_scores(query_tokens: List[str], corpus_tokens: List[List[str]]) -> List[float]:
+    query_set = set(query_tokens)
+    scores: List[float] = []
+    for doc_tokens in corpus_tokens:
+        if not doc_tokens:
+            scores.append(0.0)
+            continue
+        doc_set = set(doc_tokens)
+        overlap = len(query_set & doc_set)
+        coverage = overlap / max(len(query_set), 1)
+        density = overlap / max(len(doc_set), 1)
+        scores.append(float(coverage + (0.25 * density)))
+    return scores
 
 
 @dataclass(frozen=True)
@@ -101,8 +119,12 @@ class BM25Store:
             return []
 
         corpus_tokens = [tokenize(t) for t in texts]
-        bm25 = BM25Okapi(corpus_tokens)
-        scores = bm25.get_scores(query_tokens)
+        if BM25Okapi is not None:
+            bm25 = BM25Okapi(corpus_tokens)
+            scores = bm25.get_scores(query_tokens)
+        else:
+            # Keep lexical retrieval available when rank_bm25 is not installed.
+            scores = _fallback_scores(query_tokens, corpus_tokens)
 
         top_idx = sorted(range(len(scores)), key=lambda i: float(scores[i]), reverse=True)[:top_k]
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from typing import Any, Dict
-import structlog
+from app.logging_utils import get_logger
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from app.agents.state import DueDiligenceState
@@ -15,7 +15,7 @@ from app.agents.specialists import (
     value_agent,
 )
 from app.services.observability.metrics import HITL_APPROVALS
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 async def supervisor_node(state: DueDiligenceState) -> Dict[str, Any]:
     """
     Decide the next agent based on what has already been completed.

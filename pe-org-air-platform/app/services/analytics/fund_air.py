@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List
 
-import structlog
+from app.logging_utils import get_logger
 
 from app.services.integration.portfolio_data_service import PortfolioCompanyView
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 SECTOR_BENCHMARKS = {
     "technology": {"q1": 75, "q2": 65, "q3": 55, "q4": 45},

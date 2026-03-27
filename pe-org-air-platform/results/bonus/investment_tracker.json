@@ -1,0 +1,21 @@
+[
+  {
+    "investment_id": "inv_b1509f7b9681",
+    "fund_id": "growth_fund_v",
+    "company_id": "1fe32432-e260-489f-aeae-438b76cfd376",
+    "program_name": "NVDA - NVIDIA Corporation AI Acceleration",
+    "thesis": "Fund governed AI enablement and workflow redesign to compound enterprise value.",
+    "invested_amount_mm": 5.0,
+    "current_value_mm": 6.0,
+    "realized_value_mm": 0.0,
+    "expected_value_mm": 7.5,
+    "target_org_air": 75.0,
+    "current_org_air": 63.44,
+    "status": "active",
+    "start_date": "2026-03-27",
+    "notes": "Recorded from Streamlit dashboard",
+    "created_at": "2026-03-27T21:01:30.262980+00:00",
+    "updated_at": "2026-03-27T21:01:30.262980+00:00",
+    "metadata": {}
+  }
+]

@@ -186,6 +186,8 @@ Required for realistic local execution:
 
 Useful optional settings:
 
+- `API_BASE_URL`
+  Backend base URL used by the Streamlit UI. Defaults to `http://127.0.0.1:8000`.
 - `CS1_PORTFOLIOS_JSON`
   Local fallback for explicit portfolio holdings and enterprise values.
 - `MCP_CLIENT_TRANSPORT`

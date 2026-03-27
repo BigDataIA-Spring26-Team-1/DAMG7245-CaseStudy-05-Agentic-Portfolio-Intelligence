@@ -4,7 +4,7 @@ USER root
 RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 
 USER airflow
-RUN pip install --no-cache-dir poetry==1.8.3
+RUN pip install --no-cache-dir poetry==2.2.1
 
 WORKDIR /opt/airflow/project
 COPY pyproject.toml poetry.lock /opt/airflow/project/
