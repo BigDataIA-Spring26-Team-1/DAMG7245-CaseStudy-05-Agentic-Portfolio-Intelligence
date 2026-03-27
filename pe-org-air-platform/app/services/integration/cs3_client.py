@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from app.services.integration.scoring_client import ScoringClient
+from app.services.observability.metrics import track_cs_client
 
 from pathlib import Path
 import subprocess
@@ -89,6 +90,7 @@ class CS3Client:
     def __init__(self, scoring_client: Optional[ScoringClient] = None) -> None:
         self.scoring_client = scoring_client or ScoringClient()
 
+    @track_cs_client("cs3", "get_assessment")
     def get_assessment(self, company_id: str) -> CompanyAssessment:
         payload = self.scoring_client.get_assessment(company_id)
         dimension_scores: Dict[Dimension, DimensionScore] = {}
@@ -119,6 +121,7 @@ class CS3Client:
             position_factor=float(payload.get("position_factor", 0.0) or 0.0),
         )
 
+    @track_cs_client("cs3", "get_dimension_score")
     def get_dimension_score(self, company_id: str, dimension: Dimension) -> DimensionScore:
         payload = self.scoring_client.get_dimension_score(company_id, dimension.value)
         interval = tuple(payload.get("confidence_interval", (0.0, 0.0)))
@@ -131,6 +134,7 @@ class CS3Client:
             last_updated=str(payload.get("scored_at") or ""),
         )
 
+    @track_cs_client("cs3", "get_rubric")
     def get_rubric(
         self,
         dimension: Dimension,
@@ -147,6 +151,7 @@ class CS3Client:
             )
             for item in payload
         ]
+    @track_cs_client("cs3", "run_scoring")
     def run_scoring(self, company_id: str, version: str = "v1.0") -> dict[str, Any]:
         """
         Trigger the CS3 scoring pipeline for a company by invoking the scoring runner.

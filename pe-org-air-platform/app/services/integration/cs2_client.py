@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.redis_cache import cache_get_json, cache_set_json
 from app.services.snowflake import get_snowflake_connection
+from app.services.observability.metrics import track_cs_client
 
 
 class SourceType(str, Enum):
@@ -287,6 +288,7 @@ class CS2Client:
             )
         return out
 
+    @track_cs_client("cs2", "get_evidence")
     def get_evidence(
         self,
         company_id: str,
@@ -326,6 +328,7 @@ class CS2Client:
         evidence.sort(key=lambda item: item.extracted_at, reverse=True)
         return evidence
 
+    @track_cs_client("cs2", "mark_indexed")
     def mark_indexed(self, evidence_ids: List[str]) -> int:
         now = datetime.now(timezone.utc).isoformat()
         updated = 0

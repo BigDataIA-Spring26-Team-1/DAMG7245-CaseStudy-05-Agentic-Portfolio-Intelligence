@@ -12,10 +12,11 @@ from app.dashboard.evidence_display import (
     render_company_evidence_panel,
     render_evidence_summary_table,
 )
-from app.mcp.server import call_tool
+from app.mcp.client import MCPClient
 from app.services.integration.portfolio_data_service import portfolio_data_service
 
 nest_asyncio.apply()
+mcp_client = MCPClient()
 
 st.set_page_config(
     page_title="PE OrgAIR Dashboard",
@@ -119,7 +120,7 @@ st.caption(f"Selected company: {company_for_detail}")
 
 try:
     score_payload = run_async(
-        call_tool("calculate_org_air_score", {"company_id": company_for_detail})
+        mcp_client.call_tool("calculate_org_air_score", {"company_id": company_for_detail})
     )
     score_data = json.loads(score_payload)
 
@@ -141,7 +142,7 @@ try:
     justifications = {}
     for dim in low_dimensions:
         payload = run_async(
-            call_tool(
+            mcp_client.call_tool(
                 "generate_justification",
                 {"company_id": company_for_detail, "dimension": dim},
             )

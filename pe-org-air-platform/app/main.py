@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from prometheus_client import make_asgi_app
 
 from app.config import settings
 from app.routers.health import router as health_router
@@ -22,6 +23,7 @@ from app.routers.search import router as search_router
 from app.routers.justifications import router as justifications_router
 
 app = FastAPI(title=settings.app_name)
+app.mount("/metrics", make_asgi_app())
 
 # Health (usually no prefix)
 app.include_router(health_router)

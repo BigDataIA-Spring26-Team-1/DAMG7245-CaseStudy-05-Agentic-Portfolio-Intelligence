@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import time
 from functools import wraps
 
@@ -46,11 +47,29 @@ CS_CLIENT_CALLS = Counter(
 
 def track_mcp_tool(tool_name: str):
     def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start = time.perf_counter()
+                try:
+                    result = await func(*args, **kwargs)
+                    MCP_TOOL_CALLS.labels(tool_name=tool_name, status="success").inc()
+                    return result
+                except Exception:
+                    MCP_TOOL_CALLS.labels(tool_name=tool_name, status="error").inc()
+                    raise
+                finally:
+                    MCP_TOOL_DURATION.labels(tool_name=tool_name).observe(
+                        time.perf_counter() - start
+                    )
+
+            return async_wrapper
+
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             start = time.perf_counter()
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
                 MCP_TOOL_CALLS.labels(tool_name=tool_name, status="success").inc()
                 return result
             except Exception:
@@ -61,7 +80,7 @@ def track_mcp_tool(tool_name: str):
                     time.perf_counter() - start
                 )
 
-        return wrapper
+        return sync_wrapper
 
     return decorator
 
@@ -90,10 +109,31 @@ def track_agent(agent_name: str):
 
 def track_cs_client(service: str, endpoint: str):
     def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                try:
+                    result = await func(*args, **kwargs)
+                    CS_CLIENT_CALLS.labels(
+                        service=service,
+                        endpoint=endpoint,
+                        status="success",
+                    ).inc()
+                    return result
+                except Exception:
+                    CS_CLIENT_CALLS.labels(
+                        service=service,
+                        endpoint=endpoint,
+                        status="error",
+                    ).inc()
+                    raise
+
+            return async_wrapper
+
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
                 CS_CLIENT_CALLS.labels(
                     service=service,
                     endpoint=endpoint,
@@ -108,6 +148,6 @@ def track_cs_client(service: str, endpoint: str):
                 ).inc()
                 raise
 
-        return wrapper
+        return sync_wrapper
 
     return decorator

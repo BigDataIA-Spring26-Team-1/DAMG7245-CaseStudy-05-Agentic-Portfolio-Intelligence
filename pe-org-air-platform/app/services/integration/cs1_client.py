@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 
 from app.services.integration.company_client import CompanyClient
 from app.services.snowflake import get_snowflake_connection
+from app.services.observability.metrics import track_cs_client
 
 
 class Sector(str, Enum):
@@ -106,6 +107,7 @@ class CS1Client:
             cur.close()
             conn.close()
 
+    @track_cs_client("cs1", "get_company")
     def get_company(self, identifier: str) -> Company:
         if not identifier or not identifier.strip():
             raise ValueError("identifier is required")
@@ -139,6 +141,7 @@ class CS1Client:
             cur.close()
             conn.close()
 
+    @track_cs_client("cs1", "list_companies")
     def list_companies(
         self,
         sector: Optional[Sector] = None,
@@ -180,6 +183,7 @@ class CS1Client:
             )
         return portfolios
 
+    @track_cs_client("cs1", "get_portfolio_companies")
     def get_portfolio_companies(self, portfolio_id: str) -> List[Company]:
         configured = self._configured_portfolios()
         if portfolio_id in configured:

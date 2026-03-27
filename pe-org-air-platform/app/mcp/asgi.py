@@ -1,5 +1,14 @@
 from __future__ import annotations
 
-from app.mcp.server import mcp
+from prometheus_client import make_asgi_app
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
-app = mcp.streamable_http_app()
+from app.mcp.server import MCP_PATH, mcp
+
+app = Starlette(
+    routes=[
+        Mount(MCP_PATH, app=mcp.streamable_http_app()),
+        Mount("/metrics", app=make_asgi_app()),
+    ]
+)

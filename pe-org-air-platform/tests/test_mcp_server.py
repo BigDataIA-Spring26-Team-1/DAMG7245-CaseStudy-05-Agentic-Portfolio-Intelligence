@@ -142,3 +142,4 @@ def test_asgi_app_uses_server_configured_path(monkeypatch):
     route_paths = {getattr(route, "path", None) for route in routes}
 
     assert "/mcp" in route_paths
+    assert "/metrics" in route_paths
