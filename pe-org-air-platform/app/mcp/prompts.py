@@ -24,6 +24,11 @@ def list_prompt_defs() -> list[dict]:
             "arguments": [{"name": "company_id", "required": True}],
 
         },
+        {
+            "name": "lp_update_letter",
+            "description": "Generate an LP-ready portfolio update letter",
+            "arguments": [{"name": "company_id", "required": True}],
+        },
 
     ]
  
@@ -70,7 +75,27 @@ def get_prompt(name: str, arguments: dict) -> list[dict]:
 
                     f"Prepare an IC meeting summary for {company_id} using scoring, "
 
-                    "evidence, justifications, and value creation outputs."
+                    "evidence, justifications, value creation outputs, and generate_ic_memo."
+
+                ),
+
+            }
+
+        ]
+
+    if name == "lp_update_letter":
+
+        return [
+
+            {
+
+                "role": "user",
+
+                "content": (
+
+                    f"Prepare an LP update from the portfolio context associated with {company_id}. "
+
+                    "Use get_portfolio_summary, get_investment_tracker_summary, recall_company_memory, and generate_lp_letter."
 
                 ),
 

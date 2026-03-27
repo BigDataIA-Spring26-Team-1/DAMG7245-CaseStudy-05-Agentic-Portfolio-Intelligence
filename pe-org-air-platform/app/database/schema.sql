@@ -47,6 +47,31 @@ CREATE TABLE IF NOT EXISTS assessments (
         FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 
+CREATE TABLE IF NOT EXISTS portfolios (
+    id STRING PRIMARY KEY,
+    name STRING NOT NULL,
+    fund_vintage INT,
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+CREATE TABLE IF NOT EXISTS portfolio_holdings (
+    id STRING PRIMARY KEY,
+    portfolio_id STRING NOT NULL,
+    company_id STRING NOT NULL,
+    enterprise_value_mm NUMBER(18,2),
+    entry_date DATE,
+    entry_org_air NUMBER(5,2),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    CONSTRAINT fk_portfolio_holdings_portfolio
+        FOREIGN KEY (portfolio_id) REFERENCES portfolios(id),
+    CONSTRAINT fk_portfolio_holdings_company
+        FOREIGN KEY (company_id) REFERENCES companies(id),
+    CONSTRAINT uq_portfolio_company UNIQUE (portfolio_id, company_id)
+);
+
 CREATE TABLE IF NOT EXISTS assessment_history_snapshots (
     id STRING PRIMARY KEY,
     company_id STRING NOT NULL,

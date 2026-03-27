@@ -28,7 +28,7 @@ Do not share raw `.env` values in chat, slides, or screenshots.
 Run from the repository root:
 
 ```powershell
-docker compose -f pe-org-air-platform/docker/airflow/docker-compose.airflow.yml up -d --build
+docker compose -f docker/airflow/docker-compose.airflow.yml up -d --build
 ```
 
 What this starts:
@@ -47,7 +47,7 @@ What this starts:
 Quick verification commands:
 
 ```powershell
-docker compose -f pe-org-air-platform/docker/airflow/docker-compose.airflow.yml ps
+docker compose -f docker/airflow/docker-compose.airflow.yml ps
 docker exec airflow-airflow-scheduler-1 airflow dags list
 curl.exe -I http://localhost:8081/
 ```
@@ -147,7 +147,7 @@ Common parameters in the main DAG:
 ## Stop Airflow
 
 ```powershell
-docker compose -f pe-org-air-platform/docker/airflow/docker-compose.airflow.yml down
+docker compose -f docker/airflow/docker-compose.airflow.yml down
 ```
 
 ## Common Issues
@@ -172,7 +172,7 @@ Symptom:
 Fix:
 
 ```powershell
-docker compose -f pe-org-air-platform/docker/airflow/docker-compose.airflow.yml up -d airflow-postgres airflow-webserver airflow-scheduler
+docker compose -f docker/airflow/docker-compose.airflow.yml up -d airflow-postgres airflow-webserver airflow-scheduler
 ```
 
 ### DAG Runs Fail Even Though Airflow Starts

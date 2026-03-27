@@ -57,15 +57,17 @@ if (Get-Command gcloud.cmd -ErrorAction SilentlyContinue) {
     throw "Required command not found in PATH: gcloud (or gcloud.cmd)"
 }
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$AppRoot = Join-Path $ProjectRoot "pe-org-air-platform"
 if ([string]::IsNullOrWhiteSpace($DotEnvPath)) {
-    $DotEnvPath = Join-Path $RepoRoot ".env"
+    $DotEnvPath = Join-Path $AppRoot ".env"
 }
 
 Write-Host "Project: $ProjectId"
 Write-Host "Region:  $Region"
 Write-Host "Service: $ServiceName"
-Write-Host "Context: $RepoRoot"
+Write-Host "Project: $ProjectRoot"
+Write-Host "App:     $AppRoot"
 
 $ImageUri = "$Region-docker.pkg.dev/$ProjectId/$ArtifactRepo/$($ServiceName):$ImageTag"
 Write-Host "Image:   $ImageUri"
@@ -109,7 +111,7 @@ images:
 Set-Content -Path $tmpBuildConfig -Value $cloudBuildYaml -Encoding utf8
 
 Write-Host "`n[4/6] Building and pushing container image..."
-& $Gcloud builds submit $RepoRoot --config $tmpBuildConfig --project $ProjectId | Out-Host
+& $Gcloud builds submit $ProjectRoot --config $tmpBuildConfig --project $ProjectId | Out-Host
 
 $deployArgs = @(
     "run", "deploy", $ServiceName,

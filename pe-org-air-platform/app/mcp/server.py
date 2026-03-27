@@ -11,10 +11,16 @@ from app.mcp.prompts import get_prompt, list_prompt_defs
 from app.mcp.resources import list_resource_defs, read_resource
 from app.mcp.tools import (
     calculate_org_air_score,
+    generate_ic_memo,
     generate_justification,
+    generate_lp_letter,
+    get_investment_tracker_summary,
     get_company_evidence,
     get_portfolio_summary,
     project_ebitda_impact,
+    recall_company_memory,
+    record_investment_roi,
+    remember_company_memory,
     run_gap_analysis,
 )
 
@@ -131,6 +137,102 @@ async def get_portfolio_summary_mcp(fund_id: str) -> dict[str, Any]:
     logger.info("mcp_tool_call", tool="get_portfolio_summary", fund_id=fund_id)
     payload = await get_portfolio_summary({"fund_id": fund_id})
     return json.loads(payload)
+
+
+@mcp.tool(name="remember_company_memory")
+async def remember_company_memory_mcp(
+    title: str,
+    content: str,
+    company_id: str | None = None,
+    fund_id: str | None = None,
+    category: str = "note",
+) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="remember_company_memory", company_id=company_id, fund_id=fund_id)
+    payload = await remember_company_memory(
+        {
+            "title": title,
+            "content": content,
+            "company_id": company_id,
+            "fund_id": fund_id,
+            "category": category,
+        }
+    )
+    return json.loads(payload)
+
+
+@mcp.tool(name="recall_company_memory")
+async def recall_company_memory_mcp(
+    query: str,
+    company_id: str | None = None,
+    fund_id: str | None = None,
+    category: str | None = None,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="recall_company_memory", company_id=company_id, fund_id=fund_id)
+    payload = await recall_company_memory(
+        {
+            "query": query,
+            "company_id": company_id,
+            "fund_id": fund_id,
+            "category": category,
+            "top_k": top_k,
+        }
+    )
+    return json.loads(payload)
+
+
+@mcp.tool(name="record_investment_roi")
+async def record_investment_roi_mcp(
+    fund_id: str,
+    company_id: str,
+    program_name: str,
+    thesis: str,
+    invested_amount_mm: float,
+    current_value_mm: float | None = None,
+    realized_value_mm: float = 0.0,
+    expected_value_mm: float | None = None,
+    target_org_air: float | None = None,
+    current_org_air: float | None = None,
+    status: str = "active",
+) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="record_investment_roi", company_id=company_id, fund_id=fund_id)
+    payload = await record_investment_roi(
+        {
+            "fund_id": fund_id,
+            "company_id": company_id,
+            "program_name": program_name,
+            "thesis": thesis,
+            "invested_amount_mm": invested_amount_mm,
+            "current_value_mm": current_value_mm,
+            "realized_value_mm": realized_value_mm,
+            "expected_value_mm": expected_value_mm,
+            "target_org_air": target_org_air,
+            "current_org_air": current_org_air,
+            "status": status,
+        }
+    )
+    return json.loads(payload)
+
+
+@mcp.tool(name="get_investment_tracker_summary")
+async def get_investment_tracker_summary_mcp(fund_id: str) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="get_investment_tracker_summary", fund_id=fund_id)
+    payload = await get_investment_tracker_summary({"fund_id": fund_id})
+    return json.loads(payload)
+
+
+@mcp.tool(name="generate_ic_memo")
+async def generate_ic_memo_mcp(company_id: str, fund_id: str | None = None) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="generate_ic_memo", company_id=company_id, fund_id=fund_id)
+    payload = await generate_ic_memo({"company_id": company_id, "fund_id": fund_id})
+    return json.loads(payload)
+
+
+@mcp.tool(name="generate_lp_letter")
+async def generate_lp_letter_mcp(fund_id: str) -> dict[str, Any]:
+    logger.info("mcp_tool_call", tool="generate_lp_letter", fund_id=fund_id)
+    payload = await generate_lp_letter({"fund_id": fund_id})
+    return json.loads(payload)
 # -------------------------
 # Resources
 # -------------------------
@@ -166,6 +268,12 @@ TOOL_HANDLERS = {
     "project_ebitda_impact": project_ebitda_impact,
     "run_gap_analysis": run_gap_analysis,
     "get_portfolio_summary": get_portfolio_summary,
+    "remember_company_memory": remember_company_memory,
+    "recall_company_memory": recall_company_memory,
+    "record_investment_roi": record_investment_roi,
+    "get_investment_tracker_summary": get_investment_tracker_summary,
+    "generate_ic_memo": generate_ic_memo,
+    "generate_lp_letter": generate_lp_letter,
 }
 async def call_tool(name: str, arguments: dict) -> str:
     """

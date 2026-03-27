@@ -2,6 +2,7 @@ param(
     [string]$Tickers = "NVDA,JPM,WMT,GE,DG",
     [string]$Dimension = "data_infrastructure",
     [string]$PythonPath = "",
+    [string]$PoetryPath = "",
     [switch]$SkipBackfill,
     [switch]$SkipValidation,
     [switch]$SkipCompletePipeline
@@ -13,24 +14,36 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $AppRoot = Join-Path $RepoRoot "pe-org-air-platform"
 
-function Resolve-Python {
-    param([string]$Preferred)
+function Resolve-Runner {
+    param(
+        [string]$PreferredPython,
+        [string]$PreferredPoetry
+    )
 
-    if ($Preferred) {
-        return (Resolve-Path $Preferred).Path
+    if ($PreferredPython) {
+        return @((Resolve-Path $PreferredPython).Path)
+    }
+
+    if ($PreferredPoetry) {
+        return @((Resolve-Path $PreferredPoetry).Path, "run", "python")
+    }
+
+    $poetryCmd = Get-Command poetry -ErrorAction SilentlyContinue
+    if ($poetryCmd) {
+        return @($poetryCmd.Source, "run", "python")
     }
 
     $venvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
     if (Test-Path $venvPython) {
-        return (Resolve-Path $venvPython).Path
+        return @((Resolve-Path $venvPython).Path)
     }
 
     $cmd = Get-Command python -ErrorAction SilentlyContinue
     if ($cmd) {
-        return $cmd.Source
+        return @($cmd.Source)
     }
 
-    throw "Python executable not found. Pass -PythonPath or create .venv\Scripts\python.exe."
+    throw "Poetry or Python executable not found. Pass -PoetryPath, -PythonPath, install Poetry, or create .venv\Scripts\python.exe."
 }
 
 function Invoke-Step {
@@ -50,54 +63,54 @@ function Invoke-Step {
     }
 }
 
-$Python = Resolve-Python -Preferred $PythonPath
+$Runner = Resolve-Runner -PreferredPython $PythonPath -PreferredPoetry $PoetryPath
 $tickerList = ($Tickers -split ",") | ForEach-Object { $_.Trim().ToUpper() } | Where-Object { $_ }
 $tickerCsv = ($tickerList | Select-Object -Unique) -join ","
 
 Write-Host "Repo root: $RepoRoot"
 Write-Host "App root:  $AppRoot"
-Write-Host "Python:    $Python"
+Write-Host "Runner:    $($Runner -join ' ')"
 Write-Host "Tickers:   $tickerCsv"
 Write-Host "Dimension: $Dimension"
 
 if (-not $SkipBackfill) {
     Invoke-Step `
         -Title "1. Backfill Portfolio Companies" `
-        -Command @($Python, (Join-Path $AppRoot "scripts\backfill_companies.py"))
+        -Command ($Runner + @((Join-Path $AppRoot "scripts\backfill_companies.py")))
 }
 
 Invoke-Step `
     -Title "2. Collect SEC Evidence" `
-    -Command @($Python, (Join-Path $AppRoot "scripts\collect_evidence.py"), "--companies", $tickerCsv)
+    -Command ($Runner + @((Join-Path $AppRoot "scripts\collect_evidence.py"), "--companies", $tickerCsv))
 
 Invoke-Step `
     -Title "3. Collect External Signals" `
-    -Command @($Python, (Join-Path $AppRoot "scripts\collect_signals.py"), "--companies", $tickerCsv)
+    -Command ($Runner + @((Join-Path $AppRoot "scripts\collect_signals.py"), "--companies", $tickerCsv))
 
 Invoke-Step `
     -Title "4. Score Individual Signals" `
-    -Command @($Python, (Join-Path $AppRoot "scripts\compute_signal_scores.py"))
+    -Command ($Runner + @((Join-Path $AppRoot "scripts\compute_signal_scores.py")))
 
 Invoke-Step `
     -Title "5. Build Company Signal Summaries" `
-    -Command @($Python, (Join-Path $AppRoot "scripts\compute_company_signal_summaries.py"))
+    -Command ($Runner + @((Join-Path $AppRoot "scripts\compute_company_signal_summaries.py")))
 
 Invoke-Step `
     -Title "6. Run CS3 Scoring" `
-    -Command @($Python, (Join-Path $AppRoot "scripts\run_scoring_engine.py"), "--batch", "--tickers", $tickerCsv)
+    -Command ($Runner + @((Join-Path $AppRoot "scripts\run_scoring_engine.py"), "--batch", "--tickers", $tickerCsv))
 
 if (-not $SkipValidation) {
     Invoke-Step `
         -Title "7. Validate Portfolio Score Ranges" `
-        -Command @($Python, (Join-Path $AppRoot "scripts\validate_portfolio_scores.py"))
+        -Command ($Runner + @((Join-Path $AppRoot "scripts\validate_portfolio_scores.py")))
 }
 
 if (-not $SkipCompletePipeline) {
-    $exerciseScript = Join-Path $RepoRoot "exercises\complete_pipeline.py"
+    $exerciseScript = Join-Path $AppRoot "exercises\complete_pipeline.py"
     foreach ($ticker in ($tickerList | Select-Object -Unique)) {
         Invoke-Step `
             -Title ("8. Generate CS4 End-to-End Artifact for " + $ticker) `
-            -Command @($Python, $exerciseScript, "--identifier", $ticker, "--dimension", $Dimension)
+            -Command ($Runner + @($exerciseScript, "--identifier", $ticker, "--dimension", $Dimension))
     }
 }
 

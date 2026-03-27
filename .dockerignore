@@ -1,0 +1,14 @@
+.git
+.venv
+.vscode
+.pytest_tmp
+__pycache__
+*.pyc
+chroma
+pe-org-air-platform/chroma
+pe-org-air-platform/results
+pe-org-air-platform/.pytest_cache
+pe-org-air-platform/.tmp_result_artifacts
+pe-org-air-platform/.tmp_tests
+pe-org-air-platform/tmp
+pe-org-air-platform/pytest-cache-files-*
