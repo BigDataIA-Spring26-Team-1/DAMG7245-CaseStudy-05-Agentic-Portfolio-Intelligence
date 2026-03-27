@@ -57,10 +57,15 @@ class MCPClient:
         command: str | None = None,
         args: list[str] | None = None,
     ) -> None:
-        self.transport = (transport or os.getenv("MCP_CLIENT_TRANSPORT") or "streamable-http").lower()
-        self.server_url = server_url or os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+        transport_env = os.getenv("MCP_CLIENT_TRANSPORT")
+        server_url_env = os.getenv("MCP_SERVER_URL")
+
+        self.transport = (transport or transport_env or "streamable-http").lower()
+        self.server_url = server_url or server_url_env or "http://127.0.0.1:8000/mcp"
         self.command = command or os.getenv("MCP_SERVER_COMMAND", "python")
         self.args = args or self._default_stdio_args()
+        self._transport_explicit = transport is not None or transport_env is not None
+        self._server_url_explicit = server_url is not None or server_url_env is not None
 
     def _default_stdio_args(self) -> list[str]:
         configured = os.getenv("MCP_SERVER_ARGS")
@@ -69,33 +74,65 @@ class MCPClient:
 
         return ["scripts/run_mcp_server.py"]
 
+    def _should_fallback_to_stdio(self) -> bool:
+        return (
+            self.transport == "streamable-http"
+            and not self._transport_explicit
+            and not self._server_url_explicit
+        )
+
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[ClientSession]:
-        if self.transport == "stdio":
-            env = os.environ.copy()
-            env["MCP_TRANSPORT"] = "stdio"
-            params = StdioServerParameters(
-                command=self.command,
-                args=self.args,
-                env=env,
-                cwd=Path(__file__).resolve().parents[2],
-            )
-            async with stdio_client(params) as (read_stream, write_stream):
+    async def _stdio_session(self) -> AsyncIterator[ClientSession]:
+        env = os.environ.copy()
+        env["MCP_TRANSPORT"] = "stdio"
+        params = StdioServerParameters(
+            command=self.command,
+            args=self.args,
+            env=env,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+        async with stdio_client(params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                yield session
+
+    @asynccontextmanager
+    async def _streamable_http_session(self) -> AsyncIterator[ClientSession]:
+        async with httpx.AsyncClient(timeout=60.0) as http_client:
+            async with streamable_http_client(self.server_url, http_client=http_client) as (
+                read_stream,
+                write_stream,
+                _,
+            ):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     yield session
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[ClientSession]:
+        if self.transport == "stdio":
+            async with self._stdio_session() as session:
+                yield session
             return
 
         if self.transport == "streamable-http":
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
-                async with streamable_http_client(self.server_url, http_client=http_client) as (
-                    read_stream,
-                    write_stream,
-                    _,
-                ):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
+            if self._should_fallback_to_stdio():
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=2.0)) as http_client:
+                        await http_client.get(self.server_url)
+                except (httpx.ConnectError, httpx.ConnectTimeout):
+                    logger.warning(
+                        "mcp_client_http_unreachable_falling_back_to_stdio",
+                        server_url=self.server_url,
+                        command=self.command,
+                        args=self.args,
+                    )
+                    async with self._stdio_session() as session:
                         yield session
+                    return
+
+            async with self._streamable_http_session() as session:
+                yield session
             return
 
         raise ValueError(f"Unsupported MCP transport: {self.transport}")
