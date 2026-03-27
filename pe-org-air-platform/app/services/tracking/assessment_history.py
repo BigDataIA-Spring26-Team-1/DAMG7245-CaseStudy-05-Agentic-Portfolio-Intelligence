@@ -9,13 +9,13 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-import structlog
+from app.logging_utils import get_logger
 
 from app.services import snowflake as snowflake_service
 from app.services.integration.cs1_client import CS1Client
 from app.services.integration.cs3_client import CS3Client
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def _quantize(value: Any) -> Decimal:

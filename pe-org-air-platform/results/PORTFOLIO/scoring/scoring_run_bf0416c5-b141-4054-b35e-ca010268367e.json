@@ -1,0 +1,11 @@
+{
+  "company_ids": [
+    "1c9d28b8-321f-4e53-8450-e1175f57f538"
+  ],
+  "generated_at_utc": "2026-03-27T21:29:52+00:00",
+  "model_version": "cs3-scoring-v2",
+  "run_id": "bf0416c5-b141-4054-b35e-ca010268367e",
+  "status": "success",
+  "tickers": null,
+  "version": "v1.0"
+}

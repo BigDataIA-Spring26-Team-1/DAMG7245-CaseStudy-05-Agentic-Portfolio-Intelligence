@@ -13,7 +13,7 @@ RUN useradd --create-home --uid 10001 appuser
 
 # Install Poetry and application dependencies
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir poetry==1.8.3
+    && pip install --no-cache-dir poetry==2.2.1
 
 COPY pyproject.toml poetry.lock README.md /workspace/
 COPY pe-org-air-platform /workspace/pe-org-air-platform

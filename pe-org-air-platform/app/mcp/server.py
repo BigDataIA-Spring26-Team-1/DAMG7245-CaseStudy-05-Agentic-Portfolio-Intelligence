@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any
 
-import structlog
+from app.logging_utils import get_logger
 from mcp.server.fastmcp import FastMCP
 
 from app.mcp.prompts import get_prompt, list_prompt_defs
@@ -24,7 +24,7 @@ from app.mcp.tools import (
     run_gap_analysis,
 )
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 MCP_HOST = os.getenv("MCP_HOST", "127.0.0.1")
 MCP_PORT = int(os.getenv("MCP_PORT", "8000"))

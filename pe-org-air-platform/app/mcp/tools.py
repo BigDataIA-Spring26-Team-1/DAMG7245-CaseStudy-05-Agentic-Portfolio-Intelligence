@@ -5,7 +5,7 @@ import json
 from functools import lru_cache
 from typing import Any
 
-import structlog
+from app.logging_utils import get_logger
  
 from app.bonus_facade import (
     generate_ic_memo as generate_ic_memo_artifact,
@@ -27,7 +27,7 @@ from app.services.observability.metrics import track_mcp_tool
 from app.services.retrieval.dimension_mapper import DimensionMapper
 from app.services.value_creation import value_creation_service
  
-logger = structlog.get_logger()
+logger = get_logger(__name__)
  
 
 @lru_cache(maxsize=1)
@@ -259,6 +259,23 @@ async def get_portfolio_summary(arguments: dict) -> str:
     fund_id = arguments["fund_id"]
     portfolio = await portfolio_data_service.get_portfolio_view(fund_id)
 
+    if not portfolio:
+        return json.dumps(
+            {
+                "fund_id": fund_id,
+                "fund_air": 0.0,
+                "company_count": 0,
+                "quartile_distribution": {1: 0, 2: 0, 3: 0, 4: 0},
+                "sector_hhi": 0.0,
+                "avg_delta_since_entry": 0.0,
+                "total_ev_mm": 0.0,
+                "ai_leaders_count": 0,
+                "ai_laggards_count": 0,
+                "companies": [],
+            },
+            indent=2,
+        )
+
     from app.services.analytics.fund_air import fund_air_calculator
 
     enterprise_values = {
@@ -287,8 +304,14 @@ async def get_portfolio_summary(arguments: dict) -> str:
                 {
                     "company_id": c.company_id,
                     "ticker": c.ticker,
+                    "name": c.name,
                     "org_air": c.org_air,
+                    "vr_score": c.vr_score,
+                    "hr_score": c.hr_score,
+                    "synergy_score": c.synergy_score,
                     "sector": c.sector,
+                    "evidence_count": c.evidence_count,
+                    "delta": c.delta_since_entry,
                     "delta_since_entry": c.delta_since_entry,
                     "enterprise_value_mm": c.enterprise_value_mm,
                     "enterprise_value_source": c.enterprise_value_source,

@@ -3,17 +3,19 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
 
-import structlog
+from app.logging_utils import get_logger
 
 from app.services import snowflake as snowflake_service
 from app.services.integration.cs1_client import CS1Client
 from app.services.integration.cs2_client import CS2Client
 from app.services.integration.cs3_client import CS3Client
-from app.services.integration.cs4_client import CS4Client
 
-logger = structlog.get_logger()
+if TYPE_CHECKING:
+    from app.services.integration.cs4_client import CS4Client
+
+logger = get_logger(__name__)
 
 
 async def _run_sync(func, *args, **kwargs):
@@ -55,6 +57,8 @@ class PortfolioDataService:
     @property
     def cs4(self) -> CS4Client:
         if self._cs4 is None:
+            from app.services.integration.cs4_client import CS4Client
+
             self._cs4 = CS4Client()
         return self._cs4
 
@@ -117,20 +121,28 @@ class PortfolioDataService:
         conn = snowflake_service.get_snowflake_connection()
         cur = conn.cursor()
         try:
-            cur.execute(
-                """
-                SELECT org_air
-                FROM assessment_history_snapshots
-                WHERE company_id = %s
-                ORDER BY snapshot_timestamp ASC
-                LIMIT 1
-                """,
-                (company_id,),
-            )
-            row = cur.fetchone()
-            if row is None or row[0] is None:
+            try:
+                cur.execute(
+                    """
+                    SELECT org_air
+                    FROM assessment_history_snapshots
+                    WHERE company_id = %s
+                    ORDER BY snapshot_timestamp ASC
+                    LIMIT 1
+                    """,
+                    (company_id,),
+                )
+                row = cur.fetchone()
+                if row is None or row[0] is None:
+                    return float(current_score)
+                return float(row[0])
+            except Exception as exc:
+                logger.warning(
+                    "portfolio_entry_score_unavailable_falling_back",
+                    company_id=company_id,
+                    error=str(exc),
+                )
                 return float(current_score)
-            return float(row[0])
         finally:
             cur.close()
             conn.close()

@@ -2,15 +2,16 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict
-import structlog
+from app.logging_utils import get_logger
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from app.agents.state import DueDiligenceState
 from app.config import settings
 from app.mcp.client import MCPClient
 from app.services.observability.metrics import track_agent
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class MultiLLM:
@@ -53,8 +54,8 @@ class MultiLLM:
         primary = self._get_primary()
         fallback = self._get_fallback()
         if primary is None and fallback is None:
-            raise RuntimeError(
-                "No LLM API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY."
+            return SimpleNamespace(
+                content="LLM summary unavailable: no model API keys configured in runtime."
             )
         try:
             if primary is not None:
@@ -66,9 +67,11 @@ class MultiLLM:
                 return fallback.invoke(prompt)
         except Exception as e2:
             logger.error("both_llms_failed", error=str(e2))
-            raise
-        raise RuntimeError(
-            "No available LLM client. Check OPENAI_API_KEY or GEMINI_API_KEY and connectivity."
+            return SimpleNamespace(
+                content="LLM summary unavailable: model providers could not be reached."
+            )
+        return SimpleNamespace(
+            content="LLM summary unavailable: no active model client is available."
         )
 class MCPToolCaller:
     """

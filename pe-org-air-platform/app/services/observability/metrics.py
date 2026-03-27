@@ -4,7 +4,70 @@ import inspect
 import time
 from functools import wraps
 
-from prometheus_client import Counter, Histogram
+try:
+    from prometheus_client import (
+        Counter,
+        Histogram,
+        generate_latest as _generate_latest,
+        make_asgi_app as _make_asgi_app,
+    )
+
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+
+    class _NoopMetric:
+        def labels(self, **kwargs):
+            return self
+
+        def inc(self, amount: float = 1.0) -> None:
+            return None
+
+        def observe(self, amount: float) -> None:
+            return None
+
+    def Counter(*args, **kwargs):  # type: ignore[misc]
+        return _NoopMetric()
+
+    def Histogram(*args, **kwargs):  # type: ignore[misc]
+        return _NoopMetric()
+
+    def _generate_latest() -> bytes:
+        # Keep /metrics usable even when prometheus_client is unavailable.
+        return (
+            b"# HELP mcp_tool_calls_total Total MCP tool invocations\n"
+            b"# TYPE mcp_tool_calls_total counter\n"
+            b"mcp_tool_calls_total{tool_name=\"unavailable\",status=\"unavailable\"} 0\n"
+            b"# HELP agent_invocations_total Total agent invocations\n"
+            b"# TYPE agent_invocations_total counter\n"
+            b"agent_invocations_total{agent_name=\"unavailable\",status=\"unavailable\"} 0\n"
+            b"# HELP hitl_approvals_total HITL approval requests\n"
+            b"# TYPE hitl_approvals_total counter\n"
+            b"hitl_approvals_total{reason=\"unavailable\",decision=\"unavailable\"} 0\n"
+            b"# HELP cs_client_calls_total Calls to backend services\n"
+            b"# TYPE cs_client_calls_total counter\n"
+            b"cs_client_calls_total{service=\"unavailable\",endpoint=\"unavailable\",status=\"unavailable\"} 0\n"
+        )
+
+    def _make_asgi_app():
+        async def app(scope, receive, send):
+            if scope["type"] != "http":
+                return
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": _generate_latest(),
+                }
+            )
+
+        return app
 
 MCP_TOOL_CALLS = Counter(
     "mcp_tool_calls_total",
@@ -43,6 +106,14 @@ CS_CLIENT_CALLS = Counter(
     "Calls to CS1-CS4 services",
     ["service", "endpoint", "status"],
 )
+
+
+def generate_latest_metrics() -> bytes:
+    return _generate_latest()
+
+
+def make_metrics_asgi_app():
+    return _make_asgi_app()
 
 
 def track_mcp_tool(tool_name: str):
