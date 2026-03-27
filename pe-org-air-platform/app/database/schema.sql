@@ -46,6 +46,25 @@ CREATE TABLE IF NOT EXISTS assessments (
     CONSTRAINT fk_assessments_company
         FOREIGN KEY (company_id) REFERENCES companies(id)
 );
+
+CREATE TABLE IF NOT EXISTS assessment_history_snapshots (
+    id STRING PRIMARY KEY,
+    company_id STRING NOT NULL,
+    snapshot_timestamp TIMESTAMP_NTZ NOT NULL,
+    org_air NUMBER(5,2) NOT NULL,
+    vr_score NUMBER(5,2),
+    hr_score NUMBER(5,2),
+    synergy_score NUMBER(5,2),
+    dimension_scores_json VARIANT,
+    confidence_lower NUMBER(5,2),
+    confidence_upper NUMBER(5,2),
+    evidence_count INT DEFAULT 0,
+    assessor_id STRING,
+    assessment_type STRING DEFAULT 'full',
+    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    CONSTRAINT fk_assessment_history_company
+        FOREIGN KEY (company_id) REFERENCES companies(id)
+);
  
 -- Dimension scores table
 CREATE TABLE IF NOT EXISTS dimension_scores (
