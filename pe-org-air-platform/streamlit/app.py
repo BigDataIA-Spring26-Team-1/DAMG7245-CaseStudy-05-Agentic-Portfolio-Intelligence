@@ -69,7 +69,7 @@ from app.dashboard.evidence_display import (  # noqa: E402
 )
 from app.services.analytics.fund_air import SECTOR_BENCHMARKS  # noqa: E402
 
-DEFAULT_API_BASE = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+DEFAULT_API_BASE = os.getenv("API_BASE_URL", "https://org-air-api-334893558229.us-central1.run.app/")
 DEFAULT_API_PREFIX = os.getenv("API_PREFIX", "/api/v1")
 FUND_DISPLAY_ALIASES: dict[str, str] = {
     "growth_fund_v": "Flagship Growth Portfolio",
@@ -1114,7 +1114,7 @@ with tab_history:
         if st.button("Calculate Trend", key=_wk("calc_trend")):
             with st.spinner("Calculating trend..."):
                 try:
-                    trend = _platform_get_json(f"/platform/history/{hist_company}/trend")
+                    trend = _platform_get_json(f"/platform/history/{hist_company_id}/trend")
                     st.session_state[_wk("trend_result")] = trend
                 except Exception as ex:
                     st.error(f"Trend calculation failed: {_error_message(ex)}")

@@ -40,7 +40,8 @@ async def test_record_assessment_persists_snapshot(fake_sf):
 
     assert float(snapshot.org_air) == 72.5
     assert fake_sf.queries
-    sql, params = fake_sf.queries[0]
+    assert "CREATE TABLE IF NOT EXISTS assessment_history_snapshots" in fake_sf.queries[0][0]
+    sql, params = fake_sf.queries[1]
     assert "INSERT INTO assessment_history_snapshots" in sql
     assert params[1] == "company-1"
     assert params[11] == "professor"
@@ -71,6 +72,8 @@ async def test_get_history_reads_persisted_snapshots(fake_sf):
     history = await service.get_history("company-1", days=30)
 
     assert len(history) == 1
+    assert "CREATE TABLE IF NOT EXISTS assessment_history_snapshots" in fake_sf.queries[0][0]
+    assert "FROM assessment_history_snapshots" in fake_sf.queries[1][0]
     assert history[0].company_id == "company-1"
     assert float(history[0].dimension_scores["data_infrastructure"]) == 60.0
     assert history[0].assessment_type == "limited"

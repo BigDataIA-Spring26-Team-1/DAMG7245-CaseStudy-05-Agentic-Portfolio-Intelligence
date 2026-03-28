@@ -367,7 +367,18 @@ async def execute_due_diligence(
     request: DueDiligenceRequest,
 ) -> Any:
     company_id = _resolve_company_id(company_identifier)
-    workflow_module = importlib.import_module("app.agents.run_due_diligence")
+    try:
+        workflow_module = importlib.import_module("app.agents.run_due_diligence")
+    except ModuleNotFoundError as exc:
+        missing = getattr(exc, "name", "") or "required dependency"
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Due diligence workflow unavailable: missing dependency '{missing}'. "
+                "Install project agent dependencies and restart the API server."
+            ),
+        ) from exc
+
     try:
         result = await workflow_module.run_due_diligence(company_id, request.assessment_type)
         return _jsonable(result)

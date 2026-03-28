@@ -93,6 +93,33 @@ class AssessmentHistoryService:
         self.cs1 = cs1_client
         self.cs3 = cs3_client
         self._cache: Dict[str, List[AssessmentSnapshot]] = {}
+        self._table_ready = False
+
+    def _ensure_history_table(self, cur: Any) -> None:
+        if self._table_ready:
+            return
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assessment_history_snapshots (
+                id STRING PRIMARY KEY,
+                company_id STRING NOT NULL,
+                snapshot_timestamp TIMESTAMP_NTZ NOT NULL,
+                org_air NUMBER(5,2) NOT NULL,
+                vr_score NUMBER(5,2),
+                hr_score NUMBER(5,2),
+                synergy_score NUMBER(5,2),
+                dimension_scores_json VARIANT,
+                confidence_lower NUMBER(5,2),
+                confidence_upper NUMBER(5,2),
+                evidence_count INT DEFAULT 0,
+                assessor_id STRING,
+                assessment_type STRING DEFAULT 'full',
+                created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+            )
+            """
+        )
+        self._table_ready = True
 
     def _row_to_snapshot(self, row: tuple[Any, ...]) -> AssessmentSnapshot:
         confidence_interval = (
@@ -158,6 +185,7 @@ class AssessmentHistoryService:
         conn = snowflake_service.get_snowflake_connection()
         cur = conn.cursor()
         try:
+            self._ensure_history_table(cur)
             cur.execute(
                 """
                 INSERT INTO assessment_history_snapshots (
@@ -219,6 +247,7 @@ class AssessmentHistoryService:
         conn = snowflake_service.get_snowflake_connection()
         cur = conn.cursor()
         try:
+            self._ensure_history_table(cur)
             cur.execute(
                 """
                 SELECT
