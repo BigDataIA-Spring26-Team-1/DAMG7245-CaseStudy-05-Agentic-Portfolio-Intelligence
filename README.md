@@ -48,7 +48,7 @@ Static dashboards and one-off scripts are not enough for this workflow. CS5 addr
 
 ## Codelabs Documentation
 
-Add the public Codelabs document URL and preview URL here once finalized.
+- Codelabs Preview: https://codelabs-preview.appspot.com/?file_id=1NeHLt3GEpjhhhg5ssUSpIOi80oyrqBBPEI-rd-uREnc#20
 
 ## Video Walkthrough
 
