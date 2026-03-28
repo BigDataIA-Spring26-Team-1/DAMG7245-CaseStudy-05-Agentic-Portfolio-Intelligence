@@ -41,7 +41,7 @@ Static dashboards and one-off scripts are not enough for this workflow. CS5 addr
 
 ## Live Links
 
-- Hosted UI: https://pe-org-ai-readiness.streamlit.app/
+- Hosted UI: https://pe-org-ai-readiness-engine.streamlit.app/
 - Backend: https://org-air-api-334893558229.us-central1.run.app/
 - Video Walkthrough: https://youtu.be/sQH2i6PgGE4
 - Local Streamlit entrypoint: `pe-org-air-platform/streamlit/app.py`
