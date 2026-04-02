@@ -1,4 +1,4 @@
-# DAMG7245 Case Study 5: Agentic Portfolio Intelligence
+﻿# DAMG7245 Case Study 5: Agentic Portfolio Intelligence
 
 Course: DAMG 7245 - Big Data Systems & Intelligence Analytics  
 Term: Spring 2026  
@@ -42,6 +42,7 @@ Static dashboards and one-off scripts are not enough for this workflow. CS5 addr
 ## Live Links
 
 - Hosted UI: https://pe-org-ai-readiness-engine.streamlit.app/
+- Hosted Airflow / Composer: https://6ac195e238f64ea084704ae204f258dd-dot-us-central1.composer.googleusercontent.com/home
 - Backend: https://org-air-api-334893558229.us-central1.run.app/
 - Video Walkthrough: https://youtu.be/sQH2i6PgGE4
 - Local Streamlit entrypoint: `pe-org-air-platform/streamlit/app.py`
@@ -661,3 +662,4 @@ This case study produces:
 - The canonical local container entrypoint is the root `docker-compose.yml`.
 - The canonical API image build file is `docker/Dockerfile`.
 - Temporary caches and scratch artifacts are ignored via `.gitignore` and should not be treated as source code.
+
